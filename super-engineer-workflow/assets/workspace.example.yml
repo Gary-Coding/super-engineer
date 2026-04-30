@@ -1,0 +1,8 @@
+version: 1
+mode: manual
+todo_file: /absolute/path/to/your-workspace/todo.md
+reference_files:
+  - /absolute/path/to/your-project/docs/项目介绍.md
+  - /absolute/path/to/your-project/docs/开发规范.md
+code_path: /absolute/path/to/your-project
+output_dir: /absolute/path/to/your-workspace-output
