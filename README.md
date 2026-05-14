@@ -131,31 +131,38 @@ skill 自身配置位于：
 
 如果该文件不存在，首次执行 `init` 时会自动生成默认配置并暂停流程，等待你补全。
 
-## 核心命令
+## 用户使用方式
 
-统一入口：
+这个 skill 面向用户的使用方式应该是“给 AI 提示词”，而不是让用户自己执行底层命令。
 
-```bash
-python3 scripts/run-workflow.py <command> --workspace /abs/path/to/workspace
+推荐交互方式：
+
+- 告诉 AI 当前工作空间路径
+- 告诉 AI 当前需求内容
+- 告诉 AI 使用 `todo` 模式还是 `openspec` 模式
+- 让 AI 自己调用 workflow 并汇报结果
+
+典型提示词：
+
+```text
+使用当前工作空间里的 super-engineer-workflow。
+先检查 workspace 是否就绪，然后基于当前需求生成计划、实现代码、执行自查、review 和 verify。
+如果是 OpenSpec 模式，请在 verify 后继续准备 archive，但只有在 safe_merge 时才执行归档。
 ```
 
-常用命令：
+如果只想让 AI 做计划：
 
-- `init`
-- `discover`
-- `plan`
-- `start-implement`
-- `finish-implement`
-- `review`
-- `verify`
-- `status`
+```text
+使用当前工作空间里的 super-engineer-workflow。
+先不要改代码，只做初始化、上下文定位和计划生成，然后总结目标仓库、影响范围、验收标准和主要风险。
+```
 
-OpenSpec 相关命令：
+如果只想让 AI 做归档判断：
 
-- `bootstrap-openspec`
-- `writeback-openspec`
-- `prepare-archive-openspec`
-- `archive-openspec`
+```text
+针对当前 OpenSpec change，检查 execution-summary 和 archive-input。
+告诉我是否可以 archive，以及 merge_mode、blockers 和 spec_conflicts 是什么。
+```
 
 ## 运行时产物
 
@@ -190,8 +197,8 @@ OpenSpec 模式额外产物：
 <change_dir>/super-engineer/archive-result.json
 ```
 
-`prepare-archive-openspec` 会基于计划阶段记录的 spec baseline 做冲突检测。  
-只有 `merge_mode=safe_merge` 时，才允许自动执行 `archive-openspec`。
+归档阶段会基于计划阶段记录的 spec baseline 做冲突检测。  
+只有归档检查结果为 `safe_merge` 时，才允许自动归档。
 
 ## OpenSpec 集成方式
 
