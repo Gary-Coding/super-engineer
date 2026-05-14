@@ -27,7 +27,7 @@
 - `discover -> plan -> implement -> self-check -> review -> verify` 执行流
 - `manual` 与 `auto` 两种执行模式
 - `todo` 与 `openspec` 两种输入模式
-- OpenSpec `tasks.md -> todo.generated.md` 桥接
+- OpenSpec `tasks.md -> todo_file` 桥接
 - OpenSpec 执行摘要回写
 - 归档前检查与安全归档
 - 会话级 JSON / Markdown 产物归档
@@ -40,11 +40,12 @@
 1. 规格阶段
    - OpenSpec change 产出 `proposal.md`、`design.md`、`tasks.md`
 2. 交付阶段
-   - `todo.md` 或 `todo.generated.md` 进入实现工作流
+   - `todo.md` 或 桥接 todo 进入实现工作流
 3. 归档阶段
    - 回写执行摘要，检查归档条件，满足条件后归档
 
-在 `openspec` 模式下，`todo.generated.md` 是规格到交付之间的桥接产物。  
+在 `openspec` 模式下，桥接 todo 是规格到交付之间的桥接产物。  
+桥接 todo 的实际文件路径由 `workspace.yml` 中的 `todo_file` 决定，推荐继续使用 `todo.md`。  
 它应该先被审核，再进入自动实现阶段。
 
 ## `se` 专属命令
@@ -104,14 +105,14 @@
 
 ```text
 /se:bridge
-针对当前 OpenSpec change 生成交付阶段的 todo.generated.md，并总结待审核项。
+针对当前 OpenSpec change 生成交付阶段的桥接 todo，并总结待审核项。
 ```
 
 人工确认后：
 
 ```text
 /se:approve
-我已审核当前 todo.generated.md，可以进入交付阶段。
+我已审核当前桥接 todo，可以进入交付阶段。
 ```
 
 再启动自动交付：
@@ -144,7 +145,7 @@ output_dir: /absolute/path/to/output
 version: 1
 mode: manual
 workflow_source: openspec
-todo_file: /absolute/path/to/workspace/todo.generated.md
+todo_file: /absolute/path/to/workspace/todo.md
 reference_files: []
 code_path: /absolute/path/to/code
 output_dir: /absolute/path/to/output

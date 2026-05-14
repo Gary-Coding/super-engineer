@@ -45,7 +45,9 @@ blocked
 
 ## OpenSpec 审核标记
 
-`openspec` 模式下，`todo.generated.md` 是桥接产物，必须被审核后才能进入交付。
+`openspec` 模式下，桥接 todo 是桥接产物，必须被审核后才能进入交付。
+
+桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定。不要假设固定文件名；如果用户没有特殊要求，推荐继续使用 `todo.md`。
 
 当用户执行 `/se:approve` 时，AI 应写入审核标记：
 
@@ -59,7 +61,7 @@ blocked
 {
   "approved": true,
   "approved_at": "ISO-8601 datetime",
-  "todo_file": "/absolute/path/to/todo.generated.md",
+  "todo_file": "/absolute/path/to/todo.md",
   "change_dir": "/absolute/path/to/openspec/changes/<change>",
   "source": "/se:approve"
 }
@@ -130,7 +132,7 @@ blocked
 
 用途：
 
-- 把 OpenSpec `tasks.md` 转成 `todo.generated.md`
+- 把 OpenSpec `tasks.md` 转成桥接 todo
 - 生成待审核执行清单
 
 适用模式：
@@ -152,7 +154,7 @@ blocked
 
 完成后汇报：
 
-- `todo.generated.md` 路径
+- 桥接 todo 路径
 - 进入本轮交付的任务
 - 关键约束
 - 不清楚或需要人工确认的点
@@ -162,7 +164,7 @@ blocked
 
 用途：
 
-- 记录用户已审核 `todo.generated.md`
+- 记录用户已审核桥接 todo
 - 允许 OpenSpec 交付阶段开始
 
 适用模式：
@@ -171,7 +173,7 @@ blocked
 
 前置条件：
 
-- `todo.generated.md` 已存在
+- 桥接 todo 已存在
 - 用户明确表示已审核通过
 
 内部动作：

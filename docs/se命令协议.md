@@ -10,7 +10,8 @@ AI 收到这些指令后，再根据当前工作空间、当前模式和当前�
 - 不复用 OpenSpec 官方 `/opsx:*`
 - `se` 只表达 `super-engineer` 的工作流意图
 - 用户只面向阶段说话，不需要关心底层脚本
-- `openspec` 模式下，`todo.generated.md` 是桥接产物，不是规格源头
+- `openspec` 模式下，桥接 todo 是桥接产物，不是规格源头
+- 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，推荐继续使用 `todo.md`
 
 ## 2. 阶段模型
 
@@ -86,7 +87,7 @@ blocked
 作用：
 
 - 读取当前 OpenSpec change
-- 把 `tasks.md` 转成 `todo.generated.md`
+- 把 `tasks.md` 转成桥接 todo
 - 输出待审核执行清单
 
 适用模式：
@@ -101,14 +102,14 @@ blocked
 
 ```text
 /se:bridge
-针对当前 OpenSpec change 生成 todo.generated.md，并总结待审核项。
+针对当前 OpenSpec change 生成桥接 todo，并总结待审核项。
 ```
 
 ### `/se:approve`
 
 作用：
 
-- 表达用户已审核当前 `todo.generated.md`
+- 表达用户已审核当前桥接 todo
 - 允许工作流进入交付阶段
 
 适用模式：
@@ -117,13 +118,13 @@ blocked
 
 前置条件：
 
-- 当前 `todo.generated.md` 已经人工审核
+- 当前桥接 todo 已经人工审核
 
 典型提示词：
 
 ```text
 /se:approve
-我已审核当前 todo.generated.md，可以进入交付阶段。
+我已审核当前桥接 todo，可以进入交付阶段。
 ```
 
 ### `/se:plan`
@@ -168,7 +169,7 @@ blocked
 前置条件：
 
 - `todo` 模式：`todo.md` 已存在
-- `openspec` 模式：当前 `todo.generated.md` 已审核通过
+- `openspec` 模式：当前桥接 todo 已审核通过
 
 典型提示词：
 
@@ -311,12 +312,12 @@ blocked
 核心区别是：
 
 - `todo` 模式的输入是用户直接维护的 `todo.md`
-- `openspec` 模式的输入先是 OpenSpec change，再桥接成 `todo.generated.md`
+- `openspec` 模式的输入先是 OpenSpec change，再桥接成桥接 todo
 
 ## 5. 推荐使用约束
 
 - `openspec` 模式下，不建议跳过 `/se:bridge`
-- `openspec` 模式下，不建议跳过 `todo.generated.md` 的人工审核
+- `openspec` 模式下，不建议跳过桥接 todo 的人工审核
 - `manual` 模式下，建议在 `/se:plan` 之后先看计划再进入实现
 - `auto` 模式下，只有出现硬阻塞才应该停下
 - 归档前一定先做 `/se:archive-check`
@@ -332,12 +333,12 @@ blocked
 
 ```text
 /se:bridge
-针对当前 OpenSpec change 生成 todo.generated.md，并总结待审核项。
+针对当前 OpenSpec change 生成桥接 todo，并总结待审核项。
 ```
 
 ```text
 /se:approve
-我已审核当前 todo.generated.md，可以进入交付阶段。
+我已审核当前桥接 todo，可以进入交付阶段。
 ```
 
 ```text

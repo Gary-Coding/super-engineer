@@ -38,7 +38,8 @@ description: Use this skill when the user wants an engineering workflow in the c
 
 - 不要把 `/se:*` 映射为 OpenSpec 官方 `/opsx:*`
 - 不要要求用户自己执行底层脚本
-- `openspec` 模式下，`/se:bridge` 生成的 `todo.generated.md` 必须先经过 `/se:approve` 才能进入交付阶段
+- `openspec` 模式下，`/se:bridge` 生成的桥接 todo 必须先经过 `/se:approve` 才能进入交付阶段
+- 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，不要假设固定文件名；如果用户没有特殊要求，推荐使用 `todo.md`
 - `manual` 模式下，计划、实现、审查后按门禁停留
 - `auto` 模式下，除非出现硬阻塞，否则连续推进
 - `/se:archive` 只能在 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时继续
