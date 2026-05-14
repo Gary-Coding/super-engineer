@@ -28,6 +28,7 @@
 - `manual` 与 `auto` 两种执行模式
 - `todo` 与 `openspec` 两种输入模式
 - OpenSpec `tasks.md -> todo_file` 桥接
+- `/se:propose` 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 - OpenSpec 执行摘要回写
 - 归档前检查与安全归档
 - 会话级 JSON / Markdown 产物归档
@@ -147,13 +148,15 @@ mode: manual
 workflow_source: openspec
 vars:
   demand_name: add-phone-filter
+  change_name: add-phone-filter
 demand_file: superengineer/${demand_name}/需求.md
 todo_file: superengineer/${demand_name}/todo.md
 reference_files: []
 code_path: ../../../code
 output_dir: superengineer/${demand_name}/output
 openspec:
-  change_dir: ../openspec/changes/${demand_name}
+  change_name: ${change_name}
+  change_dir: ../openspec/changes/${change_name}
 ```
 
 如果同一个工作空间经常切换需求，可以用 `vars` 避免重复修改路径：
@@ -164,6 +167,7 @@ mode: auto
 workflow_source: openspec
 vars:
   demand_name: 7-deamnd-addition-rate
+  change_name: add-addition-rate-page
 demand_file: superengineer/${demand_name}/需求.md
 todo_file: superengineer/${demand_name}/todo.md
 reference_files:
@@ -171,7 +175,8 @@ reference_files:
 code_path: ../../../code
 output_dir: superengineer/${demand_name}/output
 openspec:
-  change_dir: ../openspec/changes/${demand_name}
+  change_name: ${change_name}
+  change_dir: ../openspec/changes/${change_name}
 ```
 
 skill 自身配置位于：

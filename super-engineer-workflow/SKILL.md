@@ -44,6 +44,7 @@ description: Use this skill when the user wants an engineering workflow in the c
 - `auto` 模式下，除非出现硬阻塞，否则连续推进
 - `/se:archive` 只能在 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时继续
 - 当前置条件不满足时，停止该命令并明确说明缺少什么、应该先执行哪个 `/se:*` 命令
+- `/se:propose` 应先执行 `python3 scripts/run-workflow.py propose-openspec`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json` 和 `demand_file` 生成或完善 OpenSpec artifacts
 
 ## 先读取这些输入
 
@@ -128,6 +129,7 @@ description: Use this skill when the user wants an engineering workflow in the c
 
 OpenSpec 模式可选显式执行：
 
+- `python3 scripts/run-workflow.py propose-openspec`
 - `python3 scripts/run-workflow.py bootstrap-openspec`
 - `python3 scripts/run-workflow.py writeback-openspec`
 - `python3 scripts/run-workflow.py prepare-archive-openspec`

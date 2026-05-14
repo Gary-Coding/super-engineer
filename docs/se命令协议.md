@@ -70,6 +70,7 @@ blocked
 - 为当前需求生成或完善 OpenSpec change
 - 产出或更新 `proposal.md`、`design.md`、`tasks.md`
 - 优先读取 `workspace.yml.demand_file` 作为原始需求输入
+- 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 
 适用模式：
 

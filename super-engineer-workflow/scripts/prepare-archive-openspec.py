@@ -9,6 +9,7 @@ from common import (
     load_workspace_config,
     openspec_change_dir,
     openspec_writeback_dir,
+    collect_openspec_cli_context,
     read_json,
     workflow_source,
     workspace_root,
@@ -116,6 +117,17 @@ def main() -> None:
     if spec_conflicts:
         blockers.append("存在 spec merge 冲突，请先人工处理")
     merge_mode = "safe_merge" if not spec_conflicts else "manual_merge_required"
+    openspec_cli = collect_openspec_cli_context(config, include_archive=True)
+    status_json = ((openspec_cli.get("status") or {}).get("json") or {})
+    artifacts = status_json.get("artifacts", []) if isinstance(status_json, dict) else []
+    incomplete_artifacts = []
+    for item in artifacts:
+        status = str(item.get("status", "")).strip()
+        artifact_id = str(item.get("id") or item.get("artifact") or item.get("name") or "").strip()
+        if status and status != "done":
+            incomplete_artifacts.append({"id": artifact_id, "status": status})
+    if incomplete_artifacts:
+        blockers.append("OpenSpec status 存在未完成 artifact")
 
     payload = {
         "change_name": summary.get("change_name", ""),
@@ -130,6 +142,8 @@ def main() -> None:
         "acceptance_result": acceptance_result,
         "residual_risks": summary.get("residual_risks", []),
         "reports": summary.get("reports", {}),
+        "openspec_cli": openspec_cli,
+        "openspec_incomplete_artifacts": incomplete_artifacts,
     }
     write_json(writeback_dir / "archive-input.json", payload)
     write_text(writeback_dir / "merge-preview.md", build_markdown(payload))

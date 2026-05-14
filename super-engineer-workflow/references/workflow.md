@@ -62,6 +62,7 @@ vars:
 OpenSpec 模式下还需要：
 
 - `openspec.change_dir`
+- 可选 `openspec.change_name`
 - 可选 `openspec.tasks_file`
 - 可选 `openspec.proposal_file`
 - 可选 `openspec.design_file`
@@ -119,8 +120,9 @@ OpenSpec 模式下还需要：
 - 后续 `start-implement`、`finish-implement`、`review`、`verify`、`status` 都基于当前会话执行
 - `plan` 会自动执行 `discover`，`finish-implement` 会自动执行 `self-check`
 - `workflow_source=openspec` 时，`init` / `plan` 会自动桥接 OpenSpec `tasks.md` 到 `todo_file`
+- `workflow_source=openspec` 时，`propose-openspec` 优先调用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 - `workflow_source=openspec` 时，`review` / `verify` 会自动把执行摘要写回 `openspec.writeback_dir`
-- OpenSpec 长期规格归档建议显式执行 `prepare-archive-openspec` 与 `archive-openspec`
+- OpenSpec 长期规格归档建议显式执行 `prepare-archive-openspec` 与 `archive-openspec`；归档检查会结合 OpenSpec CLI status 与 super-engineer 的 spec baseline 冲突检测
 - `prepare-archive-openspec` 会检测 spec baseline 是否发生变化；只有 `merge_mode=safe_merge` 才允许自动归档
 - `auto` 模式下，除非进入硬阻塞，否则不能在对话里要求用户批准继续
 - 工作流总耗时按当前会话开始到 verify 收口结束的真实墙钟时间计算

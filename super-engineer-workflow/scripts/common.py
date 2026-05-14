@@ -436,7 +436,7 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
             "design_file": str(design_file.resolve()),
             "specs_dir": str(specs_dir.resolve()),
             "writeback_dir": str(writeback_dir.resolve()),
-            "change_name": change_dir.name,
+            "change_name": str(openspec_raw.get("change_name", change_dir.name)).strip() or change_dir.name,
         }
     config["openspec"] = openspec
 
@@ -611,6 +611,78 @@ def openspec_change_dir(config: dict[str, Any]) -> Path:
     return Path(str(config.get("openspec", {}).get("change_dir", ""))).resolve()
 
 
+def openspec_change_name(config: dict[str, Any]) -> str:
+    return str(config.get("openspec", {}).get("change_name", "")).strip() or openspec_change_dir(config).name
+
+
+def openspec_root(config: dict[str, Any]) -> Path:
+    return openspec_change_dir(config).parent.parent.resolve()
+
+
+def demand_path(config: dict[str, Any]) -> Path | None:
+    path_text = str(config.get("demand_file", "")).strip()
+    return Path(path_text).resolve() if path_text else None
+
+
+def openspec_cli_available() -> bool:
+    return bool(shutil.which("openspec"))
+
+
+def run_openspec_cli(config: dict[str, Any], args: list[str]) -> dict[str, Any]:
+    if not openspec_cli_available():
+        return {
+            "available": False,
+            "args": args,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "openspec CLI not found in PATH",
+            "json": None,
+        }
+    result = subprocess.run(
+        ["openspec", *args],
+        cwd=str(openspec_root(config)),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    parsed_json: Any = None
+    stdout = result.stdout.strip()
+    if stdout:
+        try:
+            parsed_json = json.loads(stdout)
+        except json.JSONDecodeError:
+            parsed_json = None
+    return {
+        "available": True,
+        "args": args,
+        "returncode": result.returncode,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "json": parsed_json,
+    }
+
+
+def collect_openspec_cli_context(config: dict[str, Any], include_apply: bool = False, include_archive: bool = False) -> dict[str, Any]:
+    change_name = openspec_change_name(config)
+    context: dict[str, Any] = {
+        "available": openspec_cli_available(),
+        "change_name": change_name,
+        "status": {},
+        "apply_instructions": {},
+        "archive_instructions": {},
+    }
+    if not context["available"]:
+        context["error"] = "openspec CLI not found in PATH"
+        return context
+    status = run_openspec_cli(config, ["status", "--change", change_name, "--json"])
+    context["status"] = status
+    if include_apply:
+        context["apply_instructions"] = run_openspec_cli(config, ["instructions", "apply", "--change", change_name, "--json"])
+    if include_archive:
+        context["archive_instructions"] = run_openspec_cli(config, ["instructions", "archive", "--change", change_name, "--json"])
+    return context
+
+
 def openspec_tasks_path(config: dict[str, Any]) -> Path:
     return Path(str(config.get("openspec", {}).get("tasks_file", ""))).resolve()
 
@@ -749,9 +821,10 @@ def build_openspec_bridge_context(config: dict[str, Any], tasks_text: str) -> di
 
     return {
         "workflow_source": "openspec",
-        "change_name": str(openspec.get("change_name", "")),
+        "change_name": openspec_change_name(config),
         "change_dir": str(openspec_change_dir(config)),
         "tasks_file": str(openspec_tasks_path(config)),
+        "openspec_cli": collect_openspec_cli_context(config, include_apply=True),
         "proposal_file": str(proposal_file.resolve()) if proposal_file.exists() else "",
         "design_file": str(design_file.resolve()) if design_file.exists() else "",
         "spec_reference_files": specs,

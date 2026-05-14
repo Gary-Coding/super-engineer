@@ -115,6 +115,9 @@ blocked
 
 内部动作：
 
+- 执行 `python3 scripts/run-workflow.py propose-openspec`
+- 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
+- 读取 `propose-input.json`
 - 读取 `demand_file` 或用户输入的需求描述，以及现有 OpenSpec 文件
 - 创建或更新 `proposal.md`
 - 创建或更新 `design.md`
@@ -150,6 +153,7 @@ blocked
 内部动作：
 
 - 执行 `python3 scripts/run-workflow.py bootstrap-openspec`
+- 读取 OpenSpec CLI status 和 apply instructions，并写入 bridge context
 - 读取生成后的 `todo_file`
 - 汇总待审核项
 - 不自动进入实现
@@ -341,6 +345,7 @@ blocked
 内部动作：
 
 - 执行 `python3 scripts/run-workflow.py prepare-archive-openspec`
+- 结合 OpenSpec CLI status / archive instructions 与 super-engineer 安全检查结果
 
 完成后汇报：
 
