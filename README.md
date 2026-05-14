@@ -153,6 +153,23 @@ openspec:
   change_dir: /absolute/path/to/openspec/changes/add-phone-filter
 ```
 
+如果同一个工作空间经常切换需求，可以用 `vars` 避免重复修改路径：
+
+```yaml
+version: 1
+mode: auto
+workflow_source: openspec
+vars:
+  demand_name: 7-deamnd-addition-rate
+todo_file: ${workspace_root}/${demand_name}/todo.md
+reference_files:
+  - /absolute/path/to/ai-workspace/${demand_name}/需求.md
+code_path: /absolute/path/to/code
+output_dir: ${workspace_root}/${demand_name}/output
+openspec:
+  change_dir: /absolute/path/to/openspec/changes/${demand_name}
+```
+
 skill 自身配置位于：
 
 ```text

@@ -164,6 +164,53 @@ def parse_simple_yaml(text: str) -> dict[str, Any]:
     return parsed
 
 
+def _stringify_workspace_vars(raw_vars: Any) -> dict[str, str]:
+    if raw_vars in ("", None):
+        return {}
+    if not isinstance(raw_vars, dict):
+        raise ValueError("workspace.yml 中的 vars 必须是对象。")
+    variables: dict[str, str] = {}
+    for key, value in raw_vars.items():
+        key_text = str(key).strip()
+        if not key_text:
+            raise ValueError("workspace.yml 中的 vars 不能包含空 key。")
+        if isinstance(value, (dict, list)):
+            raise ValueError(f"workspace.yml 中的 vars.{key_text} 必须是标量值。")
+        variables[key_text] = str(value)
+    return variables
+
+
+def _expand_workspace_value(value: Any, variables: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        def replace(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if name.startswith("vars."):
+                name = name[5:]
+            if name not in variables:
+                raise ValueError(f"workspace.yml 中引用了未定义变量：{match.group(1)}")
+            return variables[name]
+
+        return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_.-]*)\}", replace, value)
+    if isinstance(value, list):
+        return [_expand_workspace_value(item, variables) for item in value]
+    if isinstance(value, dict):
+        return {key: _expand_workspace_value(item, variables) for key, item in value.items()}
+    return value
+
+
+def expand_workspace_variables(config: dict[str, Any], root: Path) -> dict[str, Any]:
+    user_vars = _stringify_workspace_vars(config.get("vars", {}))
+    variables = {
+        "workspace_root": str(root),
+        **user_vars,
+    }
+    expanded = _expand_workspace_value(config, variables)
+    if not isinstance(expanded, dict):
+        raise ValueError("工作空间配置必须是对象结构。")
+    expanded["vars"] = user_vars
+    return expanded
+
+
 def workspace_root(workspace: Path | None = None) -> Path:
     return (workspace or Path.cwd()).expanduser().resolve()
 
@@ -322,7 +369,7 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
     if not config_path.exists():
         raise FileNotFoundError(f"未找到工作空间配置文件：{config_path}")
 
-    config = parse_simple_yaml(config_path.read_text(encoding="utf-8"))
+    config = expand_workspace_variables(parse_simple_yaml(config_path.read_text(encoding="utf-8")), root)
     config.setdefault("version", 1)
     config.setdefault("mode", "manual")
     config.setdefault("workflow_source", "todo")

@@ -21,6 +21,15 @@
 
 以上路径必须全部使用绝对路径。
 
+`workspace.yml` 支持可选 `vars`：
+
+```yaml
+vars:
+  demand_name: 7-deamnd-addition-rate
+```
+
+路径字段可以通过 `${demand_name}` 或 `${vars.demand_name}` 引用变量。内置变量 `${workspace_root}` 表示当前工作空间根目录。
+
 `~/.super-engineer/skill-config.yml` 可以包含可选通知：
 
 - `notification.pushplus.token`
