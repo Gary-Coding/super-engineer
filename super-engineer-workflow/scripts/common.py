@@ -325,12 +325,15 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
     config = parse_simple_yaml(config_path.read_text(encoding="utf-8"))
     config.setdefault("version", 1)
     config.setdefault("mode", "manual")
+    config.setdefault("workflow_source", "todo")
     config.setdefault("reference_files", [])
 
     if config.get("version") != 1:
         raise ValueError("workspace.yml 中的 version 必须为 1。")
     if config.get("mode") not in ("manual", "auto"):
         raise ValueError("workspace.yml 中的 mode 只支持 manual 或 auto。")
+    if config.get("workflow_source") not in ("todo", "openspec"):
+        raise ValueError("workspace.yml 中的 workflow_source 只支持 todo 或 openspec。")
 
     todo_file = Path(str(config.get("todo_file", ""))).expanduser()
     if not todo_file.is_absolute():
@@ -362,6 +365,37 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
     config["code_path"] = str(code_path.resolve())
     config["output_dir"] = str(output_dir.resolve())
     config["reference_files"] = normalized_refs
+    config["workflow_source"] = str(config.get("workflow_source", "todo")).strip() or "todo"
+
+    openspec_raw = config.get("openspec", {})
+    if openspec_raw in ("", None):
+        openspec_raw = {}
+    if not isinstance(openspec_raw, dict):
+        raise ValueError("workspace.yml 中的 openspec 必须是对象。")
+    openspec: dict[str, Any] = {}
+    if config["workflow_source"] == "openspec":
+        change_dir = Path(str(openspec_raw.get("change_dir", ""))).expanduser()
+        if not change_dir.is_absolute():
+            raise ValueError("OpenSpec 模式下，workspace.yml 中的 openspec.change_dir 必须是绝对路径。")
+        if not change_dir.exists() or not change_dir.is_dir():
+            raise ValueError(f"OpenSpec change_dir 不存在：{change_dir}")
+        tasks_file = Path(str(openspec_raw.get("tasks_file", change_dir / "tasks.md"))).expanduser()
+        if not tasks_file.is_absolute():
+            raise ValueError("OpenSpec 模式下，workspace.yml 中的 openspec.tasks_file 必须是绝对路径。")
+        proposal_file = Path(str(openspec_raw.get("proposal_file", change_dir / "proposal.md"))).expanduser()
+        design_file = Path(str(openspec_raw.get("design_file", change_dir / "design.md"))).expanduser()
+        specs_dir = Path(str(openspec_raw.get("specs_dir", change_dir / "specs"))).expanduser()
+        writeback_dir = Path(str(openspec_raw.get("writeback_dir", change_dir / "super-engineer"))).expanduser()
+        openspec = {
+            "change_dir": str(change_dir.resolve()),
+            "tasks_file": str(tasks_file.resolve()),
+            "proposal_file": str(proposal_file.resolve()),
+            "design_file": str(design_file.resolve()),
+            "specs_dir": str(specs_dir.resolve()),
+            "writeback_dir": str(writeback_dir.resolve()),
+            "change_name": change_dir.name,
+        }
+    config["openspec"] = openspec
 
     skill_config = load_skill_config()
     config["notification"] = skill_config.get("notification", {})
@@ -394,6 +428,10 @@ def looks_like_project_root(path: Path) -> bool:
 
 def todo_path(config: dict[str, Any]) -> Path:
     return Path(str(config["todo_file"])).resolve()
+
+
+def workflow_source(config: dict[str, Any]) -> str:
+    return str(config.get("workflow_source", "todo")).strip() or "todo"
 
 
 def artifacts_dir(config: dict[str, Any]) -> Path:
@@ -491,6 +529,12 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def file_sha256(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -518,6 +562,206 @@ def todo_template() -> str:
 ## 验收补充
 - [ ] 在这里写需要补充的测试、文档或验证要求
 """
+
+
+def openspec_change_dir(config: dict[str, Any]) -> Path:
+    return Path(str(config.get("openspec", {}).get("change_dir", ""))).resolve()
+
+
+def openspec_tasks_path(config: dict[str, Any]) -> Path:
+    return Path(str(config.get("openspec", {}).get("tasks_file", ""))).resolve()
+
+
+def openspec_reference_files(config: dict[str, Any]) -> list[str]:
+    if workflow_source(config) != "openspec":
+        return []
+    openspec = config.get("openspec", {})
+    files: list[str] = []
+    for key in ("proposal_file", "design_file"):
+        path_text = str(openspec.get(key, "")).strip()
+        if not path_text:
+            continue
+        path = Path(path_text)
+        if path.exists() and path.is_file():
+            files.append(str(path.resolve()))
+    specs_dir_text = str(openspec.get("specs_dir", "")).strip()
+    if specs_dir_text:
+        specs_dir = Path(specs_dir_text)
+        if specs_dir.exists() and specs_dir.is_dir():
+            for path in sorted(specs_dir.rglob("*.md")):
+                files.append(str(path.resolve()))
+    return unique(files)
+
+
+def openspec_writeback_dir(config: dict[str, Any]) -> Path:
+    return Path(str(config.get("openspec", {}).get("writeback_dir", ""))).resolve()
+
+
+def openspec_archive_root(config: dict[str, Any]) -> Path:
+    return openspec_change_dir(config).parent / "archive"
+
+
+def openspec_bridge_context_path(config: dict[str, Any]) -> Path:
+    return artifacts_dir(config) / "openspec-bridge-context.json"
+
+
+def transform_openspec_tasks_to_todo(tasks_text: str, change_name: str, change_dir: Path) -> str:
+    lines = [
+        "# 限制条件",
+        f"- 需求来源是 OpenSpec change：{change_name}",
+        f"- OpenSpec 变更目录是 {change_dir}",
+        "- 优先以 proposal.md、design.md 和 specs/ 下的 delta specs 作为业务边界",
+        "",
+        "# 待办事项",
+        "",
+    ]
+    has_tasks = False
+    for raw_line in tasks_text.splitlines():
+        stripped = raw_line.rstrip()
+        compact = stripped.strip()
+        if not compact:
+            if lines and lines[-1] != "":
+                lines.append("")
+            continue
+        if compact.startswith("#"):
+            heading_text = compact.lstrip("#").strip()
+            if heading_text.lower() == "tasks":
+                continue
+            lines.append(f"## {heading_text}")
+            has_tasks = True
+            continue
+        if compact.startswith("- [") or compact.startswith("* ["):
+            lines.append(compact.replace("* [", "- [", 1))
+            has_tasks = True
+            continue
+        if compact.startswith("- ") or compact.startswith("* "):
+            lines.append("- [ ] " + normalize_todo_text_item(compact))
+            has_tasks = True
+            continue
+        if re.match(r"^\d+\.\s+", compact):
+            lines.append(compact)
+            has_tasks = True
+            continue
+        lines.append("- [ ] " + normalize_todo_text_item(compact))
+        has_tasks = True
+    if not has_tasks:
+        lines.extend(
+            [
+                "## 默认任务",
+                "- [ ] OpenSpec tasks.md 中未识别到可执行任务，请先补充任务项",
+            ]
+        )
+    if lines[-1] != "":
+        lines.append("")
+    return "\n".join(lines)
+
+
+def build_openspec_bridge_context(config: dict[str, Any], tasks_text: str) -> dict[str, Any]:
+    openspec = config.get("openspec", {})
+    proposal_file = Path(str(openspec.get("proposal_file", "")))
+    design_file = Path(str(openspec.get("design_file", "")))
+    proposal_text = read_text(proposal_file) if proposal_file.exists() else ""
+    design_text = read_text(design_file) if design_file.exists() else ""
+    specs = openspec_reference_files(config)
+    change_dir = openspec_change_dir(config)
+    repo_openspec_root = change_dir.parent.parent
+    delta_specs_dir = Path(str(openspec.get("specs_dir", ""))).expanduser()
+    spec_merge_targets: list[dict[str, Any]] = []
+    if delta_specs_dir.exists() and delta_specs_dir.is_dir():
+        target_specs_root = repo_openspec_root / "specs"
+        for source in sorted(delta_specs_dir.rglob("*.md")):
+            relative = source.relative_to(delta_specs_dir)
+            target = target_specs_root / relative
+            spec_merge_targets.append(
+                {
+                    "delta_source": str(source.resolve()),
+                    "target": str(target.resolve()),
+                    "relative_path": str(relative),
+                    "target_exists": target.exists(),
+                    "target_sha256": file_sha256(target),
+                }
+            )
+
+    def extract_headings(text: str) -> list[str]:
+        headings: list[str] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                headings.append(stripped.lstrip("#").strip())
+        return headings[:12]
+
+    compatibility_notes: list[str] = []
+    for source_text in (proposal_text, design_text, tasks_text):
+        for line in source_text.splitlines():
+            stripped = line.strip()
+            lowered = stripped.lower()
+            if any(keyword in lowered for keyword in ("兼容", "rollback", "回滚", "灰度", "mq", "schema", "contract")):
+                compatibility_notes.append(stripped)
+
+    acceptance_criteria: list[str] = []
+    for line in tasks_text.splitlines():
+        stripped = normalize_todo_text_item(line)
+        if stripped and ("test" in stripped.lower() or "验证" in stripped or "验收" in stripped):
+            acceptance_criteria.append(stripped)
+
+    return {
+        "workflow_source": "openspec",
+        "change_name": str(openspec.get("change_name", "")),
+        "change_dir": str(openspec_change_dir(config)),
+        "tasks_file": str(openspec_tasks_path(config)),
+        "proposal_file": str(proposal_file.resolve()) if proposal_file.exists() else "",
+        "design_file": str(design_file.resolve()) if design_file.exists() else "",
+        "spec_reference_files": specs,
+        "proposal_headings": extract_headings(proposal_text),
+        "design_headings": extract_headings(design_text),
+        "business_constraints": [
+            f"需求来源是 OpenSpec change：{openspec.get('change_name', '')}",
+            "优先以 proposal.md、design.md 和 specs/ 下的 delta specs 作为业务边界",
+        ],
+        "acceptance_criteria": unique(acceptance_criteria),
+        "compatibility_notes": unique(compatibility_notes),
+        "spec_merge_targets": spec_merge_targets,
+        "updated_at": now_iso(),
+    }
+
+
+def ensure_workflow_inputs(config: dict[str, Any]) -> dict[str, Any]:
+    source = workflow_source(config)
+    todo_file = todo_path(config)
+    result = {
+        "workflow_source": source,
+        "todo_path": str(todo_file),
+        "todo_created": False,
+        "todo_needs_edit": False,
+        "bridge_generated": False,
+        "bridge_source": "",
+    }
+    if source == "todo":
+        if not todo_file.exists():
+            write_text(todo_file, todo_template())
+            result["todo_created"] = True
+        todo_text = read_text(todo_file)
+        result["todo_needs_edit"] = is_todo_template_placeholder(todo_text)
+        return result
+
+    tasks_file = openspec_tasks_path(config)
+    if not tasks_file.exists():
+        raise FileNotFoundError(f"OpenSpec tasks 文件不存在：{tasks_file}")
+    tasks_text = read_text(tasks_file)
+    bridged_todo = transform_openspec_tasks_to_todo(
+        tasks_text,
+        str(config.get("openspec", {}).get("change_name", tasks_file.parent.name)),
+        openspec_change_dir(config),
+    )
+    existing = read_text(todo_file)
+    if existing != bridged_todo:
+        write_text(todo_file, bridged_todo)
+        result["bridge_generated"] = True
+    result["bridge_source"] = str(tasks_file)
+    result["todo_needs_edit"] = is_todo_template_placeholder(bridged_todo)
+    bridge_context = build_openspec_bridge_context(config, tasks_text)
+    write_json(openspec_bridge_context_path(config), bridge_context)
+    return result
 
 
 def is_todo_template_placeholder(todo_text: str) -> bool:
@@ -894,7 +1138,8 @@ def existing_reference_files(config: dict[str, Any]) -> list[str]:
         path = Path(str(item))
         if path.exists():
             files.append(str(path.resolve()))
-    return files
+    files.extend(openspec_reference_files(config))
+    return unique(files)
 
 
 def find_candidate_codebases(root: Path, max_depth: int = 3) -> list[Path]:

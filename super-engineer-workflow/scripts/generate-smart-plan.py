@@ -18,6 +18,7 @@ from common import (
     parse_task_blocks,
     parse_task_modules,
     phase_after,
+    openspec_bridge_context_path,
     report_artifact_path,
     read_json,
     read_text,
@@ -229,6 +230,13 @@ def build_plan_markdown(plan: dict) -> str:
     lines.extend(["", "## 影响文件"])
     lines.extend(f"- `{item}`" for item in plan["impacted_files"]) if plan["impacted_files"] else lines.append("- 暂无识别结果")
     lines.extend(["", "## 计划置信度", f"- {plan.get('confidence', 'unknown')}"])
+    if plan.get("bridge_context"):
+        lines.extend(["", "## Bridge Context"])
+        bridge_context = plan.get("bridge_context", {})
+        lines.extend(f"- {item}" for item in bridge_context.get("business_constraints", [])) if bridge_context.get("business_constraints") else lines.append("- 暂无")
+        if bridge_context.get("compatibility_notes"):
+            lines.append("- 兼容/发布提示：")
+            lines.extend(f"  - {item}" for item in bridge_context.get("compatibility_notes", []))
     lines.extend(["", "## 定位证据"])
     evidence = plan.get("evidence", [])
     if evidence:
@@ -339,6 +347,7 @@ def main() -> None:
     docs = existing_reference_files(config)
     target_codebases, impacted_files, impacted_modules = collect_target_plan_data(codebases)
     discovery = read_json(data_artifact_path(config, "discovery.json", session_meta), {})
+    bridge_context = read_json(openspec_bridge_context_path(config), {})
     impacted_files = merge_discovery_files(discovery, impacted_files)
     impacted_modules = infer_java_modules(impacted_files) or impacted_modules
     detected = summarize_detected_projects([item["detected_project"] for item in target_codebases])
@@ -377,6 +386,7 @@ def main() -> None:
         "change_steps": build_change_steps(summary, detected, impacted_files, task_breakdown),
         "confidence": confidence_from_discovery(discovery, impacted_files),
         "evidence": discovery_evidence(discovery),
+        "bridge_context": bridge_context,
         "acceptance_criteria": build_acceptance_criteria(task_breakdown, detected),
         "implementation_slices": build_implementation_slices(task_breakdown, impacted_files),
         "test_plan": test_plan,

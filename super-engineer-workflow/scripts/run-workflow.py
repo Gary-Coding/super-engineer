@@ -16,6 +16,7 @@ from common import (
     planned_codebases,
     planned_codebase,
     read_json,
+    workflow_source,
     write_json,
     workspace_root,
 )
@@ -123,6 +124,26 @@ def command_init(workspace: Path | None) -> None:
     run_python("init-workspace.py", args)
 
 
+def command_bootstrap_openspec(workspace: Path | None) -> None:
+    args = ["--workspace", str(workspace)] if workspace else []
+    run_python("bootstrap-openspec.py", args)
+
+
+def command_writeback_openspec(workspace: Path | None) -> None:
+    args = ["--workspace", str(workspace)] if workspace else []
+    run_python("writeback-openspec.py", args)
+
+
+def command_prepare_archive_openspec(workspace: Path | None) -> None:
+    args = ["--workspace", str(workspace)] if workspace else []
+    run_python("prepare-archive-openspec.py", args)
+
+
+def command_archive_openspec(workspace: Path | None) -> None:
+    args = ["--workspace", str(workspace)] if workspace else []
+    run_python("archive-openspec.py", args)
+
+
 def command_plan(workspace: Path | None) -> None:
     command_init(workspace)
     config = load_workspace_config(workspace)
@@ -185,6 +206,8 @@ def command_finish_implement(workspace: Path | None) -> None:
 def command_review(workspace: Path | None) -> None:
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("generate-review-report.py", args)
+    if workflow_source(load_workspace_config(workspace)) == "openspec":
+        run_python("writeback-openspec.py", args)
 
 
 def command_verify(workspace: Path | None, timeout_seconds: int, force: bool = False) -> None:
@@ -194,11 +217,13 @@ def command_verify(workspace: Path | None, timeout_seconds: int, force: bool = F
     if workspace:
         args.extend(["--workspace", str(workspace)])
     run_python("run-verify-and-report.py", args)
+    if workflow_source(load_workspace_config(workspace)) == "openspec":
+        run_python("writeback-openspec.py", ["--workspace", str(workspace)] if workspace else [])
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="super-engineer 统一工作流入口。")
-    parser.add_argument("command", choices=["init", "discover", "plan", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next"])
+    parser.add_argument("command", choices=["init", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next"])
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--force", action="store_true", help="配合 verify 使用，强制重跑验证并覆盖结果。")
@@ -208,6 +233,14 @@ def main() -> None:
 
     if args.command == "init":
         command_init(workspace)
+    elif args.command == "bootstrap-openspec":
+        command_bootstrap_openspec(workspace)
+    elif args.command == "writeback-openspec":
+        command_writeback_openspec(workspace)
+    elif args.command == "prepare-archive-openspec":
+        command_prepare_archive_openspec(workspace)
+    elif args.command == "archive-openspec":
+        command_archive_openspec(workspace)
     elif args.command == "discover":
         command_discover(workspace)
     elif args.command == "plan":

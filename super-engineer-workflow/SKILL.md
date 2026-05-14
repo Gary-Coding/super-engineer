@@ -1,6 +1,6 @@
 ---
 name: super-engineer-workflow
-description: Use this skill when the user wants a todo-driven engineering workflow in the current workspace. It requires a workspace `workspace.yml`, reads the configured todo file, reference files, code path, and output directory, reads `~/.super-engineer/skill-config.yml` for skill-level settings such as notifications, creates a new archived session for each workflow run, writes AI data into .super-engineer, writes human-readable markdown reports into the configured output directory, and records total workflow duration.
+description: Use this skill when the user wants an engineering workflow in the current workspace. It supports `todo` mode and OpenSpec-bridged mode via `workspace.yml`, reads the configured todo file, reference files, code path, and output directory, reads `~/.super-engineer/skill-config.yml` for skill-level settings such as notifications, creates a new archived session for each workflow run, writes AI data into .super-engineer, writes human-readable markdown reports into the configured output directory, and records total workflow duration.
 ---
 
 # Super Engineer Workflow
@@ -11,10 +11,12 @@ description: Use this skill when the user wants a todo-driven engineering workfl
 
 1. 工作空间配置：`<workspace>/workspace.yml`
 2. Skill 配置：`~/.super-engineer/skill-config.yml`
-3. `workspace.yml` 中配置的 `todo_file`
-4. `workspace.yml` 中配置的 `reference_files`
-5. `workspace.yml` 中配置的 `code_path`
-6. `workspace.yml` 中配置的 `output_dir`
+3. `workspace.yml` 中配置的 `workflow_source`
+4. `workspace.yml` 中配置的 `todo_file`
+5. `workspace.yml` 中配置的 `reference_files`
+6. `workspace.yml` 中配置的 `code_path`
+7. `workspace.yml` 中配置的 `output_dir`
+8. 如果 `workflow_source=openspec`，继续读取 `workspace.yml` 中的 `openspec`
 
 这里的 `<workspace>` 就是当前使用这个 skill 的目录。
 
@@ -22,6 +24,8 @@ description: Use this skill when the user wants a todo-driven engineering workfl
 
 - 工作空间根目录必须存在 `workspace.yml`
 - `todo_file`、`reference_files`、`code_path`、`output_dir` 必须全部使用绝对路径
+- `workflow_source=todo` 时，`todo_file` 是用户维护的真实输入
+- `workflow_source=openspec` 时，`todo_file` 是桥接后的执行入口，内容来自 OpenSpec `tasks.md`
 - 用户真实 Skill 配置位于 `~/.super-engineer/skill-config.yml`
 - 如果启用了 `notification.pushplus.ordinary`，其中的 `token` 必须合法
 - 如果启用了 `notification.feishu`，必须提供合法的飞书机器人 `webhook_url`
@@ -73,6 +77,24 @@ description: Use this skill when the user wants a todo-driven engineering workfl
 - 如果计划不够精确，应直接去代码里定位，再补充计划并继续
 - 只有遇到 [references/workflow.md](references/workflow.md) 中定义的硬阻塞，才允许停下来询问用户
 - 如果没有硬阻塞，就继续推进到实现、审查、验证，而不是把决策留在对话里
+
+## 输入模式
+
+`workspace.yml` 用 `workflow_source` 控制输入来源：
+
+- `todo`：沿用当前模式，直接读取 `todo_file`
+- `openspec`：从 `openspec.change_dir` / `openspec.tasks_file` 生成桥接 `todo_file`，并把 `proposal.md`、`design.md`、`specs/` 下的 markdown 自动并入参考上下文
+
+OpenSpec 模式可选显式执行：
+
+- `python3 scripts/run-workflow.py bootstrap-openspec`
+- `python3 scripts/run-workflow.py writeback-openspec`
+- `python3 scripts/run-workflow.py prepare-archive-openspec`
+- `python3 scripts/run-workflow.py archive-openspec`
+
+但正常情况下，`init` 和 `plan` 会自动完成桥接。
+`review` 和 `verify` 完成后会自动把执行摘要回写到 `openspec.writeback_dir`。
+`archive-openspec` 只在 `prepare-archive-openspec` 产出的 `merge_mode=safe_merge` 时允许自动执行。
 
 ## 必走工作流
 
@@ -234,6 +256,7 @@ verify 收口时还必须：
 ## 资源导航
 
 - [references/workflow.md](references/workflow.md)：工作空间契约与产物目录规则
+- [references/contracts.md](references/contracts.md)：输入输出契约与归档顺序
 - [references/execution-modes.md](references/execution-modes.md)：`manual` 与 `auto` 行为
 - [references/planning.md](references/planning.md)：上下文定位与计划质量规则
 - [references/project-docs.md](references/project-docs.md)：参考文件的使用方式
@@ -243,6 +266,10 @@ verify 收口时还必须：
 - [references/platform-openclaw.md](references/platform-openclaw.md)：面向 OpenClaw 的后续接入约束
 - [scripts/init-workspace.py](scripts/init-workspace.py)：初始化工作空间基础目录
 - [scripts/run-workflow.py](scripts/run-workflow.py)：统一入口
+- [scripts/bootstrap-openspec.py](scripts/bootstrap-openspec.py)：OpenSpec `tasks.md` 到桥接 `todo` 的输入适配
+- [scripts/writeback-openspec.py](scripts/writeback-openspec.py)：执行摘要回写到 OpenSpec change
+- [scripts/prepare-archive-openspec.py](scripts/prepare-archive-openspec.py)：生成归档输入与 merge preview
+- [scripts/archive-openspec.py](scripts/archive-openspec.py)：归档 change 并合并 delta specs
 - [scripts/generate-smart-plan.py](scripts/generate-smart-plan.py)：生成计划
 - [scripts/update-status.py](scripts/update-status.py)：更新状态
 - [scripts/generate-review-report.py](scripts/generate-review-report.py)：生成代码审查报告

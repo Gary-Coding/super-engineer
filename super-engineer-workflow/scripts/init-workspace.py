@@ -6,15 +6,14 @@ from pathlib import Path
 
 from common import (
     ensure_runtime_dirs,
-    is_todo_template_placeholder,
+    ensure_workflow_inputs,
     load_workspace_config,
     read_text,
     todo_path,
-    todo_template,
     code_root,
     output_dir,
+    workflow_source,
     workspace_root,
-    write_text,
 )
 
 
@@ -32,14 +31,15 @@ def main() -> None:
 
     ensure_runtime_dirs(config)
 
+    input_result = ensure_workflow_inputs(config)
     todo_file = todo_path(config)
-    if not todo_file.exists():
-        write_text(todo_file, todo_template())
-        print("todo_created=true")
-    else:
-        print("todo_created=false")
+    print(f"workflow_source={workflow_source(config)}")
+    print(f"todo_created={'true' if input_result.get('todo_created') else 'false'}")
+    print(f"bridge_generated={'true' if input_result.get('bridge_generated') else 'false'}")
+    if input_result.get("bridge_source"):
+        print(f"bridge_source={input_result.get('bridge_source')}")
     todo_text = read_text(todo_file)
-    print(f"todo_needs_edit={'true' if is_todo_template_placeholder(todo_text) else 'false'}")
+    print(f"todo_needs_edit={'true' if input_result.get('todo_needs_edit') else 'false'}")
 
     print(f"workspace={workspace}")
     print(f"todo={todo_file}")

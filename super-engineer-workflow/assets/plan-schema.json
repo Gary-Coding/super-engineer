@@ -24,6 +24,7 @@
     "change_steps",
     "confidence",
     "evidence",
+    "bridge_context",
     "acceptance_criteria",
     "implementation_slices",
     "test_plan",
@@ -238,6 +239,74 @@
           "line": { "type": "integer" },
           "snippet": { "type": "string" }
         }
+      }
+    },
+    "bridge_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_source",
+        "change_name",
+        "change_dir",
+        "tasks_file",
+        "proposal_file",
+        "design_file",
+        "spec_reference_files",
+        "proposal_headings",
+        "design_headings",
+        "business_constraints",
+        "acceptance_criteria",
+        "compatibility_notes",
+        "spec_merge_targets",
+        "updated_at"
+      ],
+      "properties": {
+        "workflow_source": { "type": "string" },
+        "change_name": { "type": "string" },
+        "change_dir": { "type": "string" },
+        "tasks_file": { "type": "string" },
+        "proposal_file": { "type": "string" },
+        "design_file": { "type": "string" },
+        "spec_reference_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "proposal_headings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "design_headings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "business_constraints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "compatibility_notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "spec_merge_targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["delta_source", "target", "relative_path", "target_exists", "target_sha256"],
+            "additionalProperties": false,
+            "properties": {
+              "delta_source": { "type": "string" },
+              "target": { "type": "string" },
+              "relative_path": { "type": "string" },
+              "target_exists": { "type": "boolean" },
+              "target_sha256": { "type": "string" }
+            }
+          }
+        },
+        "updated_at": { "type": "string" }
       }
     },
     "acceptance_criteria": {

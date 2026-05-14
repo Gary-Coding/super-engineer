@@ -13,6 +13,7 @@
 
 - `version`
 - `mode`
+- `workflow_source`
 - `todo_file`
 - `reference_files`
 - `code_path`
@@ -42,6 +43,25 @@
 - `feishu.enabled=true` 时通过飞书原生自定义机器人 webhook 发送消息
 - `feishu.secret` 可选，仅在机器人开启签名校验时填写
 - 两条路由可以同时开启，工作流结束后会分别发送
+
+`workflow_source` 支持：
+
+- `todo`
+- `openspec`
+
+OpenSpec 模式下还需要：
+
+- `openspec.change_dir`
+- 可选 `openspec.tasks_file`
+- 可选 `openspec.proposal_file`
+- 可选 `openspec.design_file`
+- 可选 `openspec.specs_dir`
+- 可选 `openspec.writeback_dir`
+
+`todo_file` 在两种模式下含义不同：
+
+- `todo`：用户直接维护
+- `openspec`：由 OpenSpec `tasks.md` 桥接生成，作为执行入口
 
 `code_path` 可以是：
 
@@ -83,6 +103,10 @@
 - `current-session.json` 只指向当前正在推进的会话
 - 后续 `start-implement`、`finish-implement`、`review`、`verify`、`status` 都基于当前会话执行
 - `plan` 会自动执行 `discover`，`finish-implement` 会自动执行 `self-check`
+- `workflow_source=openspec` 时，`init` / `plan` 会自动桥接 OpenSpec `tasks.md` 到 `todo_file`
+- `workflow_source=openspec` 时，`review` / `verify` 会自动把执行摘要写回 `openspec.writeback_dir`
+- OpenSpec 长期规格归档建议显式执行 `prepare-archive-openspec` 与 `archive-openspec`
+- `prepare-archive-openspec` 会检测 spec baseline 是否发生变化；只有 `merge_mode=safe_merge` 才允许自动归档
 - `auto` 模式下，除非进入硬阻塞，否则不能在对话里要求用户批准继续
 - 工作流总耗时按当前会话开始到 verify 收口结束的真实墙钟时间计算
 
