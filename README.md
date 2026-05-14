@@ -242,5 +242,4 @@ OpenSpec change
 
 ## 许可证
 
-当前仓库还没有单独的 LICENSE 文件。  
-如果准备公开发布，建议补充正式许可证。
+本项目使用 [MIT License](LICENSE)。
