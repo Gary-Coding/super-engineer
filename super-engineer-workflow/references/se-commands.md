@@ -14,8 +14,9 @@
 4. 判断 `mode` 是 `manual` 还是 `auto`
 5. 读取当前 `.super-engineer/current-session.json` 和当前 session 的 `status.json`，如果存在
 6. 如果是 `openspec` 模式，读取 `openspec.change_dir` 下的 `proposal.md`、`design.md`、`tasks.md`、`specs/` 和 `super-engineer/` 目录
-7. 检查当前命令的前置条件
-8. 前置条件不满足时停止，并告诉用户应该先执行哪个 `/se:*` 命令
+7. 如果配置了 `demand_file`，读取它作为原始需求输入
+8. 检查当前命令的前置条件
+9. 前置条件不满足时停止，并告诉用户应该先执行哪个 `/se:*` 命令
 
 `/se:*` 命令不得要求用户自己运行底层脚本。底层脚本只能由 AI 在 skill 内部调用。
 
@@ -109,11 +110,12 @@ blocked
 
 - `workspace.yml` 中 `workflow_source=openspec`
 - 已配置 `openspec.change_dir`
-- 用户提供需求描述，或 change 目录已有足够上下文
+- 优先读取 `workspace.yml.demand_file`
+- 如果没有 `demand_file`，则使用用户提供的需求描述，或 change 目录已有上下文
 
 内部动作：
 
-- 读取需求描述和现有 OpenSpec 文件
+- 读取 `demand_file` 或用户输入的需求描述，以及现有 OpenSpec 文件
 - 创建或更新 `proposal.md`
 - 创建或更新 `design.md`
 - 创建或更新 `tasks.md`

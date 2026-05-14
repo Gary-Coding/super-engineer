@@ -15,11 +15,12 @@
 - `mode`
 - `workflow_source`
 - `todo_file`
+- `demand_file`
 - `reference_files`
 - `code_path`
 - `output_dir`
 
-以上路径可以使用相对路径或绝对路径。相对路径按当前工作空间根目录解析。
+其中 `demand_file` 可选，主要作为 `/se:propose` 的原始需求输入。以上路径可以使用相对路径或绝对路径。相对路径按当前工作空间根目录解析。
 
 `workspace.yml` 支持可选 `vars`：
 
@@ -71,6 +72,11 @@ OpenSpec 模式下还需要：
 
 - `todo`：用户直接维护
 - `openspec`：由 OpenSpec `tasks.md` 桥接生成，作为执行入口
+
+`demand_file` 是原始需求文件：
+
+- `openspec` 模式下，`/se:propose` 优先读取它生成或完善 change
+- `reference_files` 是技术参考资料，不应该用来猜测哪个文件是原始需求
 
 `code_path` 可以是：
 

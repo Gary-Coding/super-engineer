@@ -98,7 +98,7 @@
 
 ```text
 /se:propose
-需求是：经销商用户列表接口增加手机号精确筛选，要求兼容旧查询行为，并补齐 controller / service 层测试。
+请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 
 然后：
@@ -145,10 +145,13 @@ output_dir: output
 version: 1
 mode: manual
 workflow_source: openspec
-todo_file: ${demand_name}/todo.md
+vars:
+  demand_name: add-phone-filter
+demand_file: superengineer/${demand_name}/需求.md
+todo_file: superengineer/${demand_name}/todo.md
 reference_files: []
 code_path: ../../../code
-output_dir: ${demand_name}/output
+output_dir: superengineer/${demand_name}/output
 openspec:
   change_dir: ../openspec/changes/${demand_name}
 ```
@@ -161,11 +164,12 @@ mode: auto
 workflow_source: openspec
 vars:
   demand_name: 7-deamnd-addition-rate
-todo_file: ${demand_name}/todo.md
+demand_file: superengineer/${demand_name}/需求.md
+todo_file: superengineer/${demand_name}/todo.md
 reference_files:
-  - ${demand_name}/需求.md
+  - ../docs/需求分析与实现指南.md
 code_path: ../../../code
-output_dir: ${demand_name}/output
+output_dir: superengineer/${demand_name}/output
 openspec:
   change_dir: ../openspec/changes/${demand_name}
 ```

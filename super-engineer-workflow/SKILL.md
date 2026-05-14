@@ -51,10 +51,11 @@ description: Use this skill when the user wants an engineering workflow in the c
 2. Skill 配置：`~/.super-engineer/skill-config.yml`
 3. `workspace.yml` 中配置的 `workflow_source`
 4. `workspace.yml` 中配置的 `todo_file`
-5. `workspace.yml` 中配置的 `reference_files`
-6. `workspace.yml` 中配置的 `code_path`
-7. `workspace.yml` 中配置的 `output_dir`
-8. 如果 `workflow_source=openspec`，继续读取 `workspace.yml` 中的 `openspec`
+5. `workspace.yml` 中配置的 `demand_file`
+6. `workspace.yml` 中配置的 `reference_files`
+7. `workspace.yml` 中配置的 `code_path`
+8. `workspace.yml` 中配置的 `output_dir`
+9. 如果 `workflow_source=openspec`，继续读取 `workspace.yml` 中的 `openspec`
 
 这里的 `<workspace>` 就是当前使用这个 skill 的目录。
 
@@ -62,6 +63,7 @@ description: Use this skill when the user wants an engineering workflow in the c
 
 - 工作空间根目录必须存在 `workspace.yml`
 - `todo_file`、`reference_files`、`code_path`、`output_dir` 可以使用相对路径或绝对路径；相对路径按当前工作空间根目录解析
+- `demand_file` 是可选原始需求输入，主要给 `/se:propose` 使用；如果配置了，`/se:propose` 必须优先读取它
 - `workspace.yml` 支持 `vars` 变量；路径字段可以使用 `${name}` 或 `${vars.name}` 引用变量，例如 `${demand_name}`
 - `workflow_source=todo` 时，`todo_file` 是用户维护的真实输入
 - `workflow_source=openspec` 时，`todo_file` 是桥接后的执行入口，内容来自 OpenSpec `tasks.md`

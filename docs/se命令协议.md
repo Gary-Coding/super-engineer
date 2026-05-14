@@ -69,6 +69,7 @@ blocked
 
 - 为当前需求生成或完善 OpenSpec change
 - 产出或更新 `proposal.md`、`design.md`、`tasks.md`
+- 优先读取 `workspace.yml.demand_file` 作为原始需求输入
 
 适用模式：
 
@@ -78,8 +79,7 @@ blocked
 
 ```text
 /se:propose
-需求是：经销商用户列表接口增加手机号精确筛选，要求兼容旧查询行为，并补齐 controller / service 层测试。
-请生成 proposal、design 和 tasks。
+请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 
 ### `/se:bridge`
@@ -328,7 +328,7 @@ blocked
 
 ```text
 /se:propose
-需求是：经销商用户列表接口增加手机号精确筛选，要求兼容旧查询行为，并补齐 controller / service 层测试。
+请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 
 ```text

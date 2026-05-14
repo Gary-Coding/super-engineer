@@ -390,6 +390,8 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         raise ValueError("workspace.yml 中的 workflow_source 只支持 todo 或 openspec。")
 
     todo_file = resolve_workspace_path(root, config.get("todo_file", ""))
+    demand_file_raw = config.get("demand_file", "")
+    demand_file = resolve_workspace_path(root, demand_file_raw) if demand_file_raw not in ("", None) else None
 
     code_path = resolve_workspace_path(root, config.get("code_path", ""))
     if not code_path.exists():
@@ -408,6 +410,7 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         normalized_refs.append(str(path))
 
     config["todo_file"] = str(todo_file.resolve())
+    config["demand_file"] = str(demand_file.resolve()) if demand_file else ""
     config["code_path"] = str(code_path.resolve())
     config["output_dir"] = str(output_dir.resolve())
     config["reference_files"] = normalized_refs
@@ -421,8 +424,6 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
     openspec: dict[str, Any] = {}
     if config["workflow_source"] == "openspec":
         change_dir = resolve_workspace_path(root, openspec_raw.get("change_dir", ""))
-        if not change_dir.exists() or not change_dir.is_dir():
-            raise ValueError(f"OpenSpec change_dir 不存在：{change_dir}")
         tasks_file = resolve_workspace_path(root, openspec_raw.get("tasks_file", change_dir / "tasks.md"))
         proposal_file = resolve_workspace_path(root, openspec_raw.get("proposal_file", change_dir / "proposal.md"))
         design_file = resolve_workspace_path(root, openspec_raw.get("design_file", change_dir / "design.md"))
