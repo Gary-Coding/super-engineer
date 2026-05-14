@@ -222,6 +222,7 @@ OpenSpec 模式额外产物：
 
 - [docs/se命令协议.md](/Users/muke/Documents/personal/codex/super-engineer/docs/se命令协议.md)
 - [docs/中文使用手册.md](/Users/muke/Documents/personal/codex/super-engineer/docs/中文使用手册.md)
+- [docs/项目架构与设计说明.md](/Users/muke/Documents/personal/codex/super-engineer/docs/项目架构与设计说明.md)
 - [super-engineer-workflow/SKILL.md](/Users/muke/Documents/personal/codex/super-engineer/super-engineer-workflow/SKILL.md)
 - [super-engineer-workflow/references/workflow.md](/Users/muke/Documents/personal/codex/super-engineer/super-engineer-workflow/references/workflow.md)
 - [super-engineer-workflow/references/contracts.md](/Users/muke/Documents/personal/codex/super-engineer/super-engineer-workflow/references/contracts.md)
