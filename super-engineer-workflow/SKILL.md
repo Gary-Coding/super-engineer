@@ -7,6 +7,43 @@ description: Use this skill when the user wants an engineering workflow in the c
 
 当用户希望把工作空间里的 `todo.md` 变成一个可持续推进、可回看、可协作的工程工作流时，使用这个 skill。
 
+## `/se:*` 专属命令协议
+
+如果用户输入以 `/se:` 开头，必须优先按 [references/se-commands.md](references/se-commands.md) 解释，而不是把它当普通自然语言。
+
+`/se:*` 是用户发给 AI 的工作流指令，不是 shell 命令。AI 必须：
+
+1. 识别命令名和用户补充说明
+2. 读取 `<workspace>/workspace.yml`
+3. 判断 `workflow_source`、`mode`、当前会话状态和 OpenSpec change 状态
+4. 检查命令前置条件
+5. 调用本 skill 的内部 workflow 推进阶段
+6. 把结果、阻塞项和下一步建议汇报给用户
+
+支持的命令：
+
+- `/se:init`
+- `/se:propose`
+- `/se:bridge`
+- `/se:approve`
+- `/se:plan`
+- `/se:apply`
+- `/se:review`
+- `/se:verify`
+- `/se:archive-check`
+- `/se:archive`
+- `/se:status`
+
+命令处理硬约束：
+
+- 不要把 `/se:*` 映射为 OpenSpec 官方 `/opsx:*`
+- 不要要求用户自己执行底层脚本
+- `openspec` 模式下，`/se:bridge` 生成的 `todo.generated.md` 必须先经过 `/se:approve` 才能进入交付阶段
+- `manual` 模式下，计划、实现、审查后按门禁停留
+- `auto` 模式下，除非出现硬阻塞，否则连续推进
+- `/se:archive` 只能在 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时继续
+- 当前置条件不满足时，停止该命令并明确说明缺少什么、应该先执行哪个 `/se:*` 命令
+
 ## 先读取这些输入
 
 1. 工作空间配置：`<workspace>/workspace.yml`
@@ -95,6 +132,23 @@ OpenSpec 模式可选显式执行：
 但正常情况下，`init` 和 `plan` 会自动完成桥接。
 `review` 和 `verify` 完成后会自动把执行摘要回写到 `openspec.writeback_dir`。
 `archive-openspec` 只在 `prepare-archive-openspec` 产出的 `merge_mode=safe_merge` 时允许自动执行。
+
+`openspec` 模式下，如果用户通过 `/se:*` 使用工作流，推荐阶段顺序是：
+
+1. `/se:propose`
+2. `/se:bridge`
+3. `/se:approve`
+4. `/se:plan` 或 `/se:apply`
+5. `/se:archive-check`
+6. `/se:archive`
+
+`todo` 模式下，如果用户通过 `/se:*` 使用工作流，推荐阶段顺序是：
+
+1. `/se:init`
+2. `/se:plan`
+3. `/se:apply`
+4. `/se:review`
+5. `/se:verify`
 
 ## 必走工作流
 
@@ -255,6 +309,7 @@ verify 收口时还必须：
 
 ## 资源导航
 
+- [references/se-commands.md](references/se-commands.md)：`/se:*` 专属命令协议
 - [references/workflow.md](references/workflow.md)：工作空间契约与产物目录规则
 - [references/contracts.md](references/contracts.md)：输入输出契约与归档顺序
 - [references/execution-modes.md](references/execution-modes.md)：`manual` 与 `auto` 行为
