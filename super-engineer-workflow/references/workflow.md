@@ -62,12 +62,13 @@ vars:
 OpenSpec 模式下还需要：
 
 - `openspec.change_dir`
-- 可选 `openspec.change_name`
 - 可选 `openspec.tasks_file`
 - 可选 `openspec.proposal_file`
 - 可选 `openspec.design_file`
 - 可选 `openspec.specs_dir`
 - 可选 `openspec.writeback_dir`
+
+OpenSpec change 名称默认从 `vars.demand_name` 推导；如果 `demand_name` 以数字前缀开头，例如 `7-deamnd-addition-rate`，工作流会自动去掉前缀并使用 `deamnd-addition-rate`，避免 OpenSpec change 名称以数字开头。`openspec.change_name` 只作为兼容旧配置的字段，不建议新增配置。
 
 `todo_file` 在两种模式下含义不同：
 

@@ -148,15 +148,13 @@ mode: manual
 workflow_source: openspec
 vars:
   demand_name: add-phone-filter
-  change_name: add-phone-filter
 demand_file: superengineer/${demand_name}/需求.md
 todo_file: superengineer/${demand_name}/todo.md
 reference_files: []
 code_path: ../../../code
 output_dir: superengineer/${demand_name}/output
 openspec:
-  change_name: ${change_name}
-  change_dir: ../openspec/changes/${change_name}
+  change_dir: ../openspec/changes/${demand_name}
 ```
 
 如果同一个工作空间经常切换需求，可以用 `vars` 避免重复修改路径：
@@ -167,7 +165,6 @@ mode: auto
 workflow_source: openspec
 vars:
   demand_name: 7-deamnd-addition-rate
-  change_name: add-addition-rate-page
 demand_file: superengineer/${demand_name}/需求.md
 todo_file: superengineer/${demand_name}/todo.md
 reference_files:
@@ -175,9 +172,10 @@ reference_files:
 code_path: ../../../code
 output_dir: superengineer/${demand_name}/output
 openspec:
-  change_name: ${change_name}
-  change_dir: ../openspec/changes/${change_name}
+  change_dir: ../openspec/changes/${demand_name}
 ```
+
+OpenSpec change 名称会自动从 `demand_name` 推导。若需求目录以数字前缀开头，例如 `7-deamnd-addition-rate`，实际 OpenSpec change 会归一为 `deamnd-addition-rate`，避免违反 OpenSpec change 名称规则。
 
 skill 自身配置位于：
 

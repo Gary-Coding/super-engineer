@@ -218,6 +218,14 @@ def resolve_workspace_path(root: Path, value: Any) -> Path:
     return (root / path).resolve()
 
 
+def normalize_openspec_change_name(value: Any) -> str:
+    raw = str(value).strip()
+    if not raw:
+        return ""
+    normalized = re.sub(r"^\d+[-_]+", "", raw).strip("-_")
+    return normalized or raw
+
+
 def workspace_root(workspace: Path | None = None) -> Path:
     return (workspace or Path.cwd()).expanduser().resolve()
 
@@ -423,7 +431,24 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         raise ValueError("workspace.yml 中的 openspec 必须是对象。")
     openspec: dict[str, Any] = {}
     if config["workflow_source"] == "openspec":
-        change_dir = resolve_workspace_path(root, openspec_raw.get("change_dir", ""))
+        vars_config = config.get("vars", {})
+        demand_name = ""
+        if isinstance(vars_config, dict):
+            demand_name = str(vars_config.get("demand_name", "")).strip()
+
+        raw_change_dir_value = openspec_raw.get("change_dir", "")
+        if raw_change_dir_value in ("", None):
+            if not demand_name:
+                raise ValueError("workflow_source=openspec 时必须配置 openspec.change_dir 或 vars.demand_name。")
+            raw_change_dir_value = str(Path("openspec") / "changes" / demand_name)
+
+        raw_change_dir = resolve_workspace_path(root, raw_change_dir_value)
+        configured_change_name = str(openspec_raw.get("change_name", "")).strip()
+        change_name_source = configured_change_name or demand_name or raw_change_dir.name
+        change_name = normalize_openspec_change_name(change_name_source)
+        change_dir = raw_change_dir
+        if change_name and raw_change_dir.name != change_name:
+            change_dir = raw_change_dir.parent / change_name
         tasks_file = resolve_workspace_path(root, openspec_raw.get("tasks_file", change_dir / "tasks.md"))
         proposal_file = resolve_workspace_path(root, openspec_raw.get("proposal_file", change_dir / "proposal.md"))
         design_file = resolve_workspace_path(root, openspec_raw.get("design_file", change_dir / "design.md"))
@@ -436,7 +461,7 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
             "design_file": str(design_file.resolve()),
             "specs_dir": str(specs_dir.resolve()),
             "writeback_dir": str(writeback_dir.resolve()),
-            "change_name": str(openspec_raw.get("change_name", change_dir.name)).strip() or change_dir.name,
+            "change_name": change_name or change_dir.name,
         }
     config["openspec"] = openspec
 

@@ -12,6 +12,7 @@ AI 收到这些指令后，再根据当前工作空间、当前模式和当前�
 - 用户只面向阶段说话，不需要关心底层脚本
 - `openspec` 模式下，桥接 todo 是桥接产物，不是规格源头
 - 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，推荐继续使用 `todo.md`
+- OpenSpec change 名称默认从 `vars.demand_name` 推导；如果需求名以数字前缀开头，例如 `7-deamnd-addition-rate`，自动使用去掉前缀后的 `deamnd-addition-rate`
 
 ## 2. 阶段模型
 

@@ -1,20 +1,19 @@
 version: 1
 mode: manual
 workflow_source: todo
-todo_file: /absolute/path/to/your-workspace/todo.md
+todo_file: todo.md
 reference_files:
-  - /absolute/path/to/your-project/docs/项目介绍.md
-  - /absolute/path/to/your-project/docs/开发规范.md
-code_path: /absolute/path/to/your-project
-output_dir: /absolute/path/to/your-workspace-output
+  - docs/项目介绍.md
+  - docs/开发规范.md
+code_path: ../your-project
+output_dir: output
 
 # 如果使用 OpenSpec 模式，改成：
 # workflow_source: openspec
-# todo_file: /absolute/path/to/your-workspace/todo.generated.md
+# vars:
+#   demand_name: 7-your-demand
+# demand_file: superengineer/${demand_name}/需求.md
+# todo_file: superengineer/${demand_name}/todo.md
+# output_dir: superengineer/${demand_name}/output
 # openspec:
-#   change_dir: /absolute/path/to/your-project/openspec/changes/your-change
-#   tasks_file: /absolute/path/to/your-project/openspec/changes/your-change/tasks.md
-#   proposal_file: /absolute/path/to/your-project/openspec/changes/your-change/proposal.md
-#   design_file: /absolute/path/to/your-project/openspec/changes/your-change/design.md
-#   specs_dir: /absolute/path/to/your-project/openspec/changes/your-change/specs
-#   writeback_dir: /absolute/path/to/your-project/openspec/changes/your-change/super-engineer
+#   change_dir: openspec/changes/${demand_name}

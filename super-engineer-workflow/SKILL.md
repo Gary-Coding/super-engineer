@@ -68,6 +68,7 @@ description: Use this skill when the user wants an engineering workflow in the c
 - `workspace.yml` 支持 `vars` 变量；路径字段可以使用 `${name}` 或 `${vars.name}` 引用变量，例如 `${demand_name}`
 - `workflow_source=todo` 时，`todo_file` 是用户维护的真实输入
 - `workflow_source=openspec` 时，`todo_file` 是桥接后的执行入口，内容来自 OpenSpec `tasks.md`
+- `workflow_source=openspec` 时，OpenSpec change 名称默认从 `vars.demand_name` 推导；如果需求名以数字前缀开头，例如 `7-deamnd-addition-rate`，必须自动去掉数字前缀并使用 `deamnd-addition-rate`
 - 用户真实 Skill 配置位于 `~/.super-engineer/skill-config.yml`
 - 如果启用了 `notification.pushplus.ordinary`，其中的 `token` 必须合法
 - 如果启用了 `notification.feishu`，必须提供合法的飞书机器人 `webhook_url`

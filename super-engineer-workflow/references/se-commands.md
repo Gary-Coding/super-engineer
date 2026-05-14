@@ -20,6 +20,8 @@
 
 `/se:*` 命令不得要求用户自己运行底层脚本。底层脚本只能由 AI 在 skill 内部调用。
 
+`openspec` 模式下，OpenSpec change 名称默认从 `vars.demand_name` 推导。如果需求名以数字前缀开头，例如 `7-deamnd-addition-rate`，AI 和内部脚本必须自动去掉前缀并使用 `deamnd-addition-rate`。
+
 ## 状态模型
 
 推荐状态流转：
