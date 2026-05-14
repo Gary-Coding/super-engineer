@@ -61,9 +61,8 @@ description: Use this skill when the user wants an engineering workflow in the c
 ## 强约束
 
 - 工作空间根目录必须存在 `workspace.yml`
-- `todo_file`、`reference_files`、`code_path`、`output_dir` 必须全部使用绝对路径
+- `todo_file`、`reference_files`、`code_path`、`output_dir` 可以使用相对路径或绝对路径；相对路径按当前工作空间根目录解析
 - `workspace.yml` 支持 `vars` 变量；路径字段可以使用 `${name}` 或 `${vars.name}` 引用变量，例如 `${demand_name}`
-- `workspace.yml` 内置变量 `${workspace_root}`，表示当前工作空间根目录
 - `workflow_source=todo` 时，`todo_file` 是用户维护的真实输入
 - `workflow_source=openspec` 时，`todo_file` 是桥接后的执行入口，内容来自 OpenSpec `tasks.md`
 - 用户真实 Skill 配置位于 `~/.super-engineer/skill-config.yml`

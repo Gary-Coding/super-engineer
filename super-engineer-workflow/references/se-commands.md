@@ -61,8 +61,8 @@ blocked
 {
   "approved": true,
   "approved_at": "ISO-8601 datetime",
-  "todo_file": "/absolute/path/to/todo.md",
-  "change_dir": "/absolute/path/to/openspec/changes/<change>",
+  "todo_file": "todo.md",
+  "change_dir": "../openspec/changes/<change>",
   "source": "/se:approve"
 }
 ```

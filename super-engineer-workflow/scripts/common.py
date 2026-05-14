@@ -211,6 +211,13 @@ def expand_workspace_variables(config: dict[str, Any], root: Path) -> dict[str, 
     return expanded
 
 
+def resolve_workspace_path(root: Path, value: Any) -> Path:
+    path = Path(str(value)).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return (root / path).resolve()
+
+
 def workspace_root(workspace: Path | None = None) -> Path:
     return (workspace or Path.cwd()).expanduser().resolve()
 
@@ -382,19 +389,13 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
     if config.get("workflow_source") not in ("todo", "openspec"):
         raise ValueError("workspace.yml 中的 workflow_source 只支持 todo 或 openspec。")
 
-    todo_file = Path(str(config.get("todo_file", ""))).expanduser()
-    if not todo_file.is_absolute():
-        raise ValueError("workspace.yml 中的 todo_file 必须是绝对路径。")
+    todo_file = resolve_workspace_path(root, config.get("todo_file", ""))
 
-    code_path = Path(str(config.get("code_path", ""))).expanduser()
-    if not code_path.is_absolute():
-        raise ValueError("workspace.yml 中的 code_path 必须是绝对路径。")
+    code_path = resolve_workspace_path(root, config.get("code_path", ""))
     if not code_path.exists():
         raise ValueError(f"workspace.yml 中的 code_path 不存在：{code_path}")
 
-    output_dir = Path(str(config.get("output_dir", ""))).expanduser()
-    if not output_dir.is_absolute():
-        raise ValueError("workspace.yml 中的 output_dir 必须是绝对路径。")
+    output_dir = resolve_workspace_path(root, config.get("output_dir", ""))
 
     reference_files = config.get("reference_files", [])
     if reference_files == {}:
@@ -403,9 +404,7 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         raise ValueError("workspace.yml 中的 reference_files 必须是数组。")
     normalized_refs: list[str] = []
     for item in reference_files:
-        path = Path(str(item)).expanduser()
-        if not path.is_absolute():
-            raise ValueError("workspace.yml 中的 reference_files 必须全部使用绝对路径。")
+        path = resolve_workspace_path(root, item)
         normalized_refs.append(str(path))
 
     config["todo_file"] = str(todo_file.resolve())
@@ -421,18 +420,14 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         raise ValueError("workspace.yml 中的 openspec 必须是对象。")
     openspec: dict[str, Any] = {}
     if config["workflow_source"] == "openspec":
-        change_dir = Path(str(openspec_raw.get("change_dir", ""))).expanduser()
-        if not change_dir.is_absolute():
-            raise ValueError("OpenSpec 模式下，workspace.yml 中的 openspec.change_dir 必须是绝对路径。")
+        change_dir = resolve_workspace_path(root, openspec_raw.get("change_dir", ""))
         if not change_dir.exists() or not change_dir.is_dir():
             raise ValueError(f"OpenSpec change_dir 不存在：{change_dir}")
-        tasks_file = Path(str(openspec_raw.get("tasks_file", change_dir / "tasks.md"))).expanduser()
-        if not tasks_file.is_absolute():
-            raise ValueError("OpenSpec 模式下，workspace.yml 中的 openspec.tasks_file 必须是绝对路径。")
-        proposal_file = Path(str(openspec_raw.get("proposal_file", change_dir / "proposal.md"))).expanduser()
-        design_file = Path(str(openspec_raw.get("design_file", change_dir / "design.md"))).expanduser()
-        specs_dir = Path(str(openspec_raw.get("specs_dir", change_dir / "specs"))).expanduser()
-        writeback_dir = Path(str(openspec_raw.get("writeback_dir", change_dir / "super-engineer"))).expanduser()
+        tasks_file = resolve_workspace_path(root, openspec_raw.get("tasks_file", change_dir / "tasks.md"))
+        proposal_file = resolve_workspace_path(root, openspec_raw.get("proposal_file", change_dir / "proposal.md"))
+        design_file = resolve_workspace_path(root, openspec_raw.get("design_file", change_dir / "design.md"))
+        specs_dir = resolve_workspace_path(root, openspec_raw.get("specs_dir", change_dir / "specs"))
+        writeback_dir = resolve_workspace_path(root, openspec_raw.get("writeback_dir", change_dir / "super-engineer"))
         openspec = {
             "change_dir": str(change_dir.resolve()),
             "tasks_file": str(tasks_file.resolve()),

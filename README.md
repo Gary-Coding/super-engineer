@@ -133,10 +133,10 @@
 version: 1
 mode: manual
 workflow_source: todo
-todo_file: /absolute/path/to/workspace/todo.md
+todo_file: todo.md
 reference_files: []
-code_path: /absolute/path/to/code
-output_dir: /absolute/path/to/output
+code_path: ../../../code
+output_dir: output
 ```
 
 最小 `openspec` 模式示例：
@@ -145,12 +145,12 @@ output_dir: /absolute/path/to/output
 version: 1
 mode: manual
 workflow_source: openspec
-todo_file: /absolute/path/to/workspace/todo.md
+todo_file: ${demand_name}/todo.md
 reference_files: []
-code_path: /absolute/path/to/code
-output_dir: /absolute/path/to/output
+code_path: ../../../code
+output_dir: ${demand_name}/output
 openspec:
-  change_dir: /absolute/path/to/openspec/changes/add-phone-filter
+  change_dir: ../openspec/changes/${demand_name}
 ```
 
 如果同一个工作空间经常切换需求，可以用 `vars` 避免重复修改路径：
@@ -161,13 +161,13 @@ mode: auto
 workflow_source: openspec
 vars:
   demand_name: 7-deamnd-addition-rate
-todo_file: ${workspace_root}/${demand_name}/todo.md
+todo_file: ${demand_name}/todo.md
 reference_files:
-  - /absolute/path/to/ai-workspace/${demand_name}/需求.md
-code_path: /absolute/path/to/code
-output_dir: ${workspace_root}/${demand_name}/output
+  - ${demand_name}/需求.md
+code_path: ../../../code
+output_dir: ${demand_name}/output
 openspec:
-  change_dir: /absolute/path/to/openspec/changes/${demand_name}
+  change_dir: ../openspec/changes/${demand_name}
 ```
 
 skill 自身配置位于：

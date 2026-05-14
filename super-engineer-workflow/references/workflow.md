@@ -19,7 +19,7 @@
 - `code_path`
 - `output_dir`
 
-以上路径必须全部使用绝对路径。
+以上路径可以使用相对路径或绝对路径。相对路径按当前工作空间根目录解析。
 
 `workspace.yml` 支持可选 `vars`：
 
@@ -28,7 +28,7 @@ vars:
   demand_name: 7-deamnd-addition-rate
 ```
 
-路径字段可以通过 `${demand_name}` 或 `${vars.demand_name}` 引用变量。内置变量 `${workspace_root}` 表示当前工作空间根目录。
+路径字段可以通过 `${demand_name}` 或 `${vars.demand_name}` 引用变量。
 
 `~/.super-engineer/skill-config.yml` 可以包含可选通知：
 
