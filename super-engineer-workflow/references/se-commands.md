@@ -13,14 +13,14 @@
 3. 判断 `workflow_source` 是 `todo` 还是 `openspec`
 4. 判断 `mode` 是 `manual` 还是 `auto`
 5. 读取当前 `.super-engineer/current-session.json` 和当前 session 的 `status.json`，如果存在
-6. 如果是 `openspec` 模式，读取 `openspec.change_dir` 下的 `proposal.md`、`design.md`、`tasks.md`、`specs/` 和 `super-engineer/` 目录
+6. 如果是 `openspec` 模式，读取当前 active OpenSpec change 下的 `proposal.md`、`design.md`、`tasks.md`、`specs/` 和 `super-engineer/` 目录
 7. 如果配置了 `demand_file`，读取它作为原始需求输入
 8. 检查当前命令的前置条件
 9. 前置条件不满足时停止，并告诉用户应该先执行哪个 `/se:*` 命令
 
 `/se:*` 命令不得要求用户自己运行底层脚本。底层脚本只能由 AI 在 skill 内部调用。
 
-`openspec` 模式下，OpenSpec change 名称默认从 `vars.demand_name` 推导。如果需求名以数字前缀开头，例如 `7-deamnd-addition-rate`，AI 和内部脚本必须自动去掉前缀并使用 `deamnd-addition-rate`。
+`openspec` 模式下，OpenSpec change 名称必须由 `/se:propose <change-name>` 显式指定。AI 不得根据需求标题、需求文件名或 `vars.demand_name` 自行推导 change 名称。
 
 ## 状态模型
 
@@ -111,13 +111,13 @@ blocked
 前置条件：
 
 - `workspace.yml` 中 `workflow_source=openspec`
-- 已配置 `openspec.change_dir`
+- 用户已在 `/se:propose` 后显式指定 change 名称
 - 优先读取 `workspace.yml.demand_file`
 - 如果没有 `demand_file`，则使用用户提供的需求描述，或 change 目录已有上下文
 
 内部动作：
 
-- 执行 `python3 scripts/run-workflow.py propose-openspec`
+- 执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`
 - 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 - 读取 `propose-input.json`
 - 读取 `demand_file` 或用户输入的需求描述，以及现有 OpenSpec 文件
@@ -149,7 +149,7 @@ blocked
 前置条件：
 
 - `workspace.yml` 中 `workflow_source=openspec`
-- `openspec.change_dir` 存在
+- 已通过 `/se:propose <change-name>` 记录当前 active change，或 `workspace.yml.openspec.change_dir` 指向明确 change
 - `tasks.md` 存在且包含可执行任务
 
 内部动作：

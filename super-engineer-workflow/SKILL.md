@@ -23,7 +23,7 @@ description: Use this skill when the user wants an engineering workflow in the c
 支持的命令：
 
 - `/se:init`
-- `/se:propose`
+- `/se:propose <change-name>`
 - `/se:bridge`
 - `/se:approve`
 - `/se:plan`
@@ -44,7 +44,8 @@ description: Use this skill when the user wants an engineering workflow in the c
 - `auto` 模式下，除非出现硬阻塞，否则连续推进
 - `/se:archive` 只能在 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时继续
 - 当前置条件不满足时，停止该命令并明确说明缺少什么、应该先执行哪个 `/se:*` 命令
-- `/se:propose` 应先执行 `python3 scripts/run-workflow.py propose-openspec`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json` 和 `demand_file` 生成或完善 OpenSpec artifacts
+- `/se:propose` 必须显式携带 OpenSpec change 名称，例如 `/se:propose demand-addition-rate`；AI 不得根据需求标题或 `demand_name` 自行推导 change 名称
+- `/se:propose <change-name>` 应先执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json` 和 `demand_file` 生成或完善 OpenSpec artifacts
 
 ## 先读取这些输入
 
@@ -68,7 +69,8 @@ description: Use this skill when the user wants an engineering workflow in the c
 - `workspace.yml` 支持 `vars` 变量；路径字段可以使用 `${name}` 或 `${vars.name}` 引用变量，例如 `${demand_name}`
 - `workflow_source=todo` 时，`todo_file` 是用户维护的真实输入
 - `workflow_source=openspec` 时，`todo_file` 是桥接后的执行入口，内容来自 OpenSpec `tasks.md`
-- `workflow_source=openspec` 时，OpenSpec change 名称默认从 `vars.demand_name` 推导；如果需求名以数字前缀开头，例如 `7-deamnd-addition-rate`，必须自动去掉数字前缀并使用 `deamnd-addition-rate`
+- `workflow_source=openspec` 时，OpenSpec change 名称只能由 `/se:propose <change-name>` 显式指定；不得从 `vars.demand_name` 或需求标题推导
+- `workspace.yml.verify_commands` 可覆盖自动识别出的验证命令；当存在覆盖命令时，verify 阶段必须优先使用覆盖命令
 - 用户真实 Skill 配置位于 `~/.super-engineer/skill-config.yml`
 - 如果启用了 `notification.pushplus.ordinary`，其中的 `token` 必须合法
 - 如果启用了 `notification.feishu`，必须提供合法的飞书机器人 `webhook_url`
@@ -126,7 +128,7 @@ description: Use this skill when the user wants an engineering workflow in the c
 `workspace.yml` 用 `workflow_source` 控制输入来源：
 
 - `todo`：沿用当前模式，直接读取 `todo_file`
-- `openspec`：从 `openspec.change_dir` / `openspec.tasks_file` 生成桥接 `todo_file`，并把 `proposal.md`、`design.md`、`specs/` 下的 markdown 自动并入参考上下文
+- `openspec`：从当前 active OpenSpec change 的 `tasks.md` 生成桥接 `todo_file`，并把 `proposal.md`、`design.md`、`specs/` 下的 markdown 自动并入参考上下文
 
 OpenSpec 模式可选显式执行：
 
@@ -142,7 +144,7 @@ OpenSpec 模式可选显式执行：
 
 `openspec` 模式下，如果用户通过 `/se:*` 使用工作流，推荐阶段顺序是：
 
-1. `/se:propose`
+1. `/se:propose <change-name>`
 2. `/se:bridge`
 3. `/se:approve`
 4. `/se:plan` 或 `/se:apply`
@@ -298,6 +300,8 @@ todo 解析规则：
 - [references/verify-checklist.md](references/verify-checklist.md)
 
 优先使用仓库中识别出来的验证命令，不要凭空猜测。验证结果写到当前会话对应的 `verify.md`，同时收敛 `status.json`。
+
+项目识别应覆盖主流技术栈，包括 Java、Node.js / Vue / React、Go、Python、Rust、.NET、PHP、Ruby、Make / CMake。自动识别不可靠时，优先读取 `workspace.yml.verify_commands`。
 
 同时写入 `verify.json`，记录逐仓命令、退出码、耗时、结果和摘要。验证失败时进入 `blocked`，修复后重新执行 verify。
 

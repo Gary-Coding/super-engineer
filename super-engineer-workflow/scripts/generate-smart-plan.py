@@ -266,12 +266,12 @@ def build_plan_markdown(plan: dict) -> str:
     return "\n".join(lines)
 
 
-def collect_target_plan_data(codebases: list[Path]) -> tuple[list[dict], list[str], list[str]]:
+def collect_target_plan_data(config: dict, codebases: list[Path]) -> tuple[list[dict], list[str], list[str]]:
     targets: list[dict] = []
     all_impacted_files: list[str] = []
     all_impacted_modules: list[str] = []
     for codebase in codebases:
-        detected = detect_project(codebase)
+        detected = detect_project(codebase, config)
         impacted_files: list[str] = []
         impacted_modules: list[str] = []
         if detected["language"] == "java":
@@ -345,7 +345,7 @@ def main() -> None:
         raise SystemExit("todo.md 中没有未完成任务，请检查是否已经全部标记完成。")
     summary = summarize_todo(todo_text)
     docs = existing_reference_files(config)
-    target_codebases, impacted_files, impacted_modules = collect_target_plan_data(codebases)
+    target_codebases, impacted_files, impacted_modules = collect_target_plan_data(config, codebases)
     discovery = read_json(data_artifact_path(config, "discovery.json", session_meta), {})
     bridge_context = read_json(openspec_bridge_context_path(config), {})
     impacted_files = merge_discovery_files(discovery, impacted_files)

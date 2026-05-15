@@ -142,7 +142,7 @@ def main() -> None:
             {
                 "name": codebase.name,
                 "path": str(codebase),
-                "detected_project": detect_project(codebase),
+                "detected_project": detect_project(codebase, config),
                 "matches": deduped[:80],
             }
         )

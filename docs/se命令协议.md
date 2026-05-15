@@ -12,7 +12,7 @@ AI 收到这些指令后，再根据当前工作空间、当前模式和当前�
 - 用户只面向阶段说话，不需要关心底层脚本
 - `openspec` 模式下，桥接 todo 是桥接产物，不是规格源头
 - 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，推荐继续使用 `todo.md`
-- OpenSpec change 名称默认从 `vars.demand_name` 推导；如果需求名以数字前缀开头，例如 `7-deamnd-addition-rate`，自动使用去掉前缀后的 `deamnd-addition-rate`
+- OpenSpec change 名称必须在 `/se:propose <change-name>` 中显式指定，AI 不得根据需求标题或 `vars.demand_name` 自行推导
 
 ## 2. 阶段模型
 
@@ -64,7 +64,7 @@ blocked
 使用当前工作空间，检查 workspace 是否可用，并告诉我缺哪些配置。
 ```
 
-### `/se:propose`
+### `/se:propose <change-name>`
 
 作用：
 
@@ -80,7 +80,7 @@ blocked
 典型提示词：
 
 ```text
-/se:propose
+/se:propose add-user-phone-filter
 请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 
@@ -304,7 +304,7 @@ blocked
 
 `openspec` 模式通常从这里开始：
 
-- `/se:propose`
+- `/se:propose <change-name>`
 - `/se:bridge`
 - `/se:approve`
 - `/se:plan` 或 `/se:apply`
@@ -329,7 +329,7 @@ blocked
 下面是一条比较完整的 `openspec + auto` 使用链路：
 
 ```text
-/se:propose
+/se:propose add-user-phone-filter
 请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 

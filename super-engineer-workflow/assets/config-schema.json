@@ -18,6 +18,15 @@
       "enum": ["todo", "openspec"],
       "default": "todo"
     },
+    "vars": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"]
+      }
+    },
+    "demand_file": {
+      "type": "string"
+    },
     "todo_file": {
       "type": "string",
       "minLength": 1
@@ -38,10 +47,29 @@
       "type": "string",
       "minLength": 1
     },
+    "verify_commands": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
     "openspec": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "changes_dir": {
+          "type": "string",
+          "minLength": 1
+        },
         "change_dir": {
           "type": "string",
           "minLength": 1

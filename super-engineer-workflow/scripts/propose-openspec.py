@@ -13,8 +13,11 @@ from common import (
     openspec_writeback_dir,
     read_text,
     run_openspec_cli,
+    select_openspec_change,
+    validate_openspec_change_name,
     workflow_source,
     workspace_root,
+    write_active_openspec_change,
     write_json,
     write_text,
 )
@@ -22,6 +25,8 @@ from common import (
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="OpenSpec-native propose preparation for current workspace.")
+    parser.add_argument("change_name", nargs="?", help="OpenSpec change 名称，例如 demand-addition-rate")
+    parser.add_argument("--change", dest="change_name_option", help="OpenSpec change 名称，例如 demand-addition-rate")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     args = parser.parse_args()
 
@@ -30,6 +35,11 @@ def main() -> None:
     if workflow_source(config) != "openspec":
         raise SystemExit("当前 workspace.yml 未启用 OpenSpec 模式，无法执行 propose-openspec。")
 
+    explicit_change_name = args.change_name_option or args.change_name
+    if not explicit_change_name:
+        raise SystemExit("缺少 OpenSpec change 名称。请使用 /se:propose <change-name> 显式指定。")
+    explicit_change_name = validate_openspec_change_name(explicit_change_name)
+    config = select_openspec_change(config, explicit_change_name)
     change_name = openspec_change_name(config)
     change_dir = openspec_change_dir(config)
     writeback_dir = openspec_writeback_dir(config)
@@ -61,9 +71,11 @@ def main() -> None:
             }
         )
 
+    active_change_file = write_active_openspec_change(config, change_name)
     payload = {
         "change_name": change_name,
         "change_dir": str(change_dir),
+        "active_change_file": str(active_change_file),
         "demand_file": str(demand_file) if demand_file else "",
         "demand_text": demand_text,
         "openspec_cli_available": openspec_cli_available(),
@@ -91,6 +103,7 @@ def main() -> None:
     )
     print(f"change_name={change_name}")
     print(f"change_dir={change_dir}")
+    print(f"active_change_file={active_change_file}")
     print(f"demand_file={demand_file or ''}")
     print(f"openspec_cli_available={str(openspec_cli_available()).lower()}")
     print(f"propose_input={writeback_dir / 'propose-input.json'}")

@@ -28,10 +28,12 @@
 - `manual` 与 `auto` 两种执行模式
 - `todo` 与 `openspec` 两种输入模式
 - OpenSpec `tasks.md -> todo_file` 桥接
-- `/se:propose` 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
+- `/se:propose <change-name>` 优先使用 OpenSpec CLI 创建指定 change、读取 status 和 artifact instructions
 - OpenSpec 执行摘要回写
 - 归档前检查与安全归档
 - 会话级 JSON / Markdown 产物归档
+- 主流语言项目识别与验证命令推断：Java、Node.js / Vue / React、Go、Python、Rust、.NET、PHP、Ruby、Make / CMake
+- `workspace.yml.verify_commands` 覆盖默认验证命令
 - PushPlus / Feishu 通知
 
 ## 工作流分层
@@ -56,7 +58,7 @@
 推荐命令：
 
 - `/se:init`
-- `/se:propose`
+- `/se:propose <change-name>`
 - `/se:bridge`
 - `/se:approve`
 - `/se:plan`
@@ -98,7 +100,7 @@
 `openspec` 模式常见起点：
 
 ```text
-/se:propose
+/se:propose add-phone-filter
 请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 
@@ -140,6 +142,15 @@ code_path: ../../../code
 output_dir: output
 ```
 
+如果自动识别出的验证命令不适合当前项目，可以在 `workspace.yml` 中覆盖：
+
+```yaml
+verify_commands:
+  default: pnpm test && pnpm build
+  frontend-app: pnpm test && pnpm build
+  user-service: go test ./...
+```
+
 最小 `openspec` 模式示例：
 
 ```yaml
@@ -154,7 +165,7 @@ reference_files: []
 code_path: ../../../code
 output_dir: superengineer/${demand_name}/output
 openspec:
-  change_dir: ../openspec/changes/${demand_name}
+  changes_dir: ../openspec/changes
 ```
 
 如果同一个工作空间经常切换需求，可以用 `vars` 避免重复修改路径：
@@ -172,10 +183,10 @@ reference_files:
 code_path: ../../../code
 output_dir: superengineer/${demand_name}/output
 openspec:
-  change_dir: ../openspec/changes/${demand_name}
+  changes_dir: ../openspec/changes
 ```
 
-OpenSpec change 名称会自动从 `demand_name` 推导。若需求目录以数字前缀开头，例如 `7-deamnd-addition-rate`，实际 OpenSpec change 会归一为 `deamnd-addition-rate`，避免违反 OpenSpec change 名称规则。
+OpenSpec change 名称不从 `demand_name` 推导。请在 `/se:propose <change-name>` 后显式指定，例如 `/se:propose demand-addition-rate`。后续 `/se:bridge`、`/se:apply` 会使用 propose 阶段记录的当前 change。
 
 skill 自身配置位于：
 

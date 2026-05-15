@@ -233,7 +233,7 @@ def main() -> None:
     try:
         for codebase in codebases:
             target_plan = target_map.get(str(codebase), {})
-            detected = target_plan.get("detected_project") or detect_project(codebase)
+            detected = target_plan.get("detected_project") or detect_project(codebase, config)
             commands = [
                 {"kind": kind, "command": item}
                 for kind, item in [

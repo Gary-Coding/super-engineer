@@ -22,6 +22,17 @@
 
 其中 `demand_file` 可选，主要作为 `/se:propose` 的原始需求输入。以上路径可以使用相对路径或绝对路径。相对路径按当前工作空间根目录解析。
 
+`workspace.yml` 支持可选 `verify_commands`。当项目自动识别出的验证命令不准确，或团队希望固定验证命令时，可以配置：
+
+```yaml
+verify_commands:
+  default: pnpm test && pnpm build
+  frontend-app: pnpm test && pnpm build
+  user-service: go test ./...
+```
+
+key 可以是 `default`、目标仓库目录名或目标仓库绝对路径。匹配优先级是绝对路径、目录名、`default`。
+
 `workspace.yml` 支持可选 `vars`：
 
 ```yaml
@@ -61,14 +72,14 @@ vars:
 
 OpenSpec 模式下还需要：
 
-- `openspec.change_dir`
+- `openspec.changes_dir`
 - 可选 `openspec.tasks_file`
 - 可选 `openspec.proposal_file`
 - 可选 `openspec.design_file`
 - 可选 `openspec.specs_dir`
 - 可选 `openspec.writeback_dir`
 
-OpenSpec change 名称默认从 `vars.demand_name` 推导；如果 `demand_name` 以数字前缀开头，例如 `7-deamnd-addition-rate`，工作流会自动去掉前缀并使用 `deamnd-addition-rate`，避免 OpenSpec change 名称以数字开头。`openspec.change_name` 只作为兼容旧配置的字段，不建议新增配置。
+OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。工作流不会从 `vars.demand_name`、需求文件名或需求标题推导 change 名称。`openspec.change_dir` / `openspec.change_name` 只作为兼容旧配置的字段，不建议新增配置。
 
 `todo_file` 在两种模式下含义不同：
 
@@ -88,6 +99,20 @@ OpenSpec change 名称默认从 `vars.demand_name` 推导；如果 `demand_name`
 如果是聚合目录，工作流应优先根据 todo 中的服务名约束自动定位目标仓库。
 
 如果 todo 中明确指定了多个服务，工作流应解析出多个目标仓库，并在后续阶段逐仓执行。
+
+实施阶段会尝试识别主流工程类型并推断验证命令：
+
+- Java：Maven / Gradle
+- Node.js / 前端：npm / pnpm / yarn / bun，包含 Vue、React、Next、Nuxt、Svelte、Angular 等常见框架
+- Go：`go test ./...`
+- Python：pytest / unittest，支持 uv / Poetry 前缀
+- Rust：Cargo
+- .NET：dotnet
+- PHP：Composer / PHPUnit
+- Ruby：Bundler / RSpec / Rake
+- Make / CMake：Makefile 或已有 build 目录下的 CTest
+
+如果无法识别可靠验证命令，verify 阶段必须进入 blocked，而不是伪造通过结果。
 
 ## 运行时目录布局
 

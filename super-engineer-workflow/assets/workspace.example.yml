@@ -7,6 +7,11 @@ reference_files:
   - docs/开发规范.md
 code_path: ../your-project
 output_dir: output
+# 可选：自动识别不准确时覆盖验证命令
+# verify_commands:
+#   default: pnpm test && pnpm build
+#   frontend-app: pnpm test && pnpm build
+#   user-service: go test ./...
 
 # 如果使用 OpenSpec 模式，改成：
 # workflow_source: openspec
@@ -16,4 +21,4 @@ output_dir: output
 # todo_file: superengineer/${demand_name}/todo.md
 # output_dir: superengineer/${demand_name}/output
 # openspec:
-#   change_dir: openspec/changes/${demand_name}
+#   changes_dir: openspec/changes

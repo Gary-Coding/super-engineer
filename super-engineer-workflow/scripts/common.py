@@ -218,12 +218,25 @@ def resolve_workspace_path(root: Path, value: Any) -> Path:
     return (root / path).resolve()
 
 
-def normalize_openspec_change_name(value: Any) -> str:
-    raw = str(value).strip()
-    if not raw:
-        return ""
-    normalized = re.sub(r"^\d+[-_]+", "", raw).strip("-_")
-    return normalized or raw
+def normalize_verify_commands(raw: Any) -> dict[str, str]:
+    if raw in ("", None):
+        return {}
+    if isinstance(raw, str):
+        command = raw.strip()
+        return {"default": command} if command else {}
+    if not isinstance(raw, dict):
+        raise ValueError("workspace.yml 中的 verify_commands 必须是字符串或对象。")
+    commands: dict[str, str] = {}
+    for key, value in raw.items():
+        key_text = str(key).strip()
+        value_text = str(value).strip()
+        if not key_text:
+            raise ValueError("workspace.yml 中的 verify_commands 不能包含空 key。")
+        if isinstance(value, (dict, list)):
+            raise ValueError(f"workspace.yml 中的 verify_commands.{key_text} 必须是字符串。")
+        if value_text:
+            commands[key_text] = value_text
+    return commands
 
 
 def workspace_root(workspace: Path | None = None) -> Path:
@@ -423,6 +436,7 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
     config["output_dir"] = str(output_dir.resolve())
     config["reference_files"] = normalized_refs
     config["workflow_source"] = str(config.get("workflow_source", "todo")).strip() or "todo"
+    config["verify_commands"] = normalize_verify_commands(config.get("verify_commands", {}))
 
     openspec_raw = config.get("openspec", {})
     if openspec_raw in ("", None):
@@ -431,37 +445,45 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         raise ValueError("workspace.yml 中的 openspec 必须是对象。")
     openspec: dict[str, Any] = {}
     if config["workflow_source"] == "openspec":
-        vars_config = config.get("vars", {})
-        demand_name = ""
-        if isinstance(vars_config, dict):
-            demand_name = str(vars_config.get("demand_name", "")).strip()
+        changes_dir_raw = openspec_raw.get("changes_dir", "")
+        change_dir_raw = openspec_raw.get("change_dir", "")
+        changes_dir = resolve_workspace_path(root, changes_dir_raw) if changes_dir_raw not in ("", None) else None
+        configured_change_dir = resolve_workspace_path(root, change_dir_raw) if change_dir_raw not in ("", None) else None
 
-        raw_change_dir_value = openspec_raw.get("change_dir", "")
-        if raw_change_dir_value in ("", None):
-            if not demand_name:
-                raise ValueError("workflow_source=openspec 时必须配置 openspec.change_dir 或 vars.demand_name。")
-            raw_change_dir_value = str(Path("openspec") / "changes" / demand_name)
-
-        raw_change_dir = resolve_workspace_path(root, raw_change_dir_value)
+        active_change = read_json(active_openspec_change_path(root), {})
+        active_change_name = str(active_change.get("change_name", "")).strip()
         configured_change_name = str(openspec_raw.get("change_name", "")).strip()
-        change_name_source = configured_change_name or demand_name or raw_change_dir.name
-        change_name = normalize_openspec_change_name(change_name_source)
-        change_dir = raw_change_dir
-        if change_name and raw_change_dir.name != change_name:
-            change_dir = raw_change_dir.parent / change_name
+
+        if changes_dir is None:
+            if configured_change_dir is not None:
+                changes_dir = configured_change_dir if configured_change_dir.name == "changes" else configured_change_dir.parent
+            else:
+                changes_dir = (root / "openspec" / "changes").resolve()
+
+        if active_change_name:
+            change_name = active_change_name
+            change_dir = changes_dir / change_name
+        elif configured_change_dir is not None and configured_change_dir.name != "changes":
+            change_dir = configured_change_dir
+            change_name = configured_change_name or change_dir.name
+        else:
+            change_name = configured_change_name
+            change_dir = changes_dir / change_name if change_name else changes_dir
+
         tasks_file = resolve_workspace_path(root, openspec_raw.get("tasks_file", change_dir / "tasks.md"))
         proposal_file = resolve_workspace_path(root, openspec_raw.get("proposal_file", change_dir / "proposal.md"))
         design_file = resolve_workspace_path(root, openspec_raw.get("design_file", change_dir / "design.md"))
         specs_dir = resolve_workspace_path(root, openspec_raw.get("specs_dir", change_dir / "specs"))
         writeback_dir = resolve_workspace_path(root, openspec_raw.get("writeback_dir", change_dir / "super-engineer"))
         openspec = {
+            "changes_dir": str(changes_dir.resolve()),
             "change_dir": str(change_dir.resolve()),
             "tasks_file": str(tasks_file.resolve()),
             "proposal_file": str(proposal_file.resolve()),
             "design_file": str(design_file.resolve()),
             "specs_dir": str(specs_dir.resolve()),
             "writeback_dir": str(writeback_dir.resolve()),
-            "change_name": change_name or change_dir.name,
+            "change_name": change_name,
         }
     config["openspec"] = openspec
 
@@ -489,6 +511,14 @@ def looks_like_project_root(path: Path) -> bool:
             (path / "build.gradle").exists(),
             (path / "build.gradle.kts").exists(),
             (path / "gradlew").exists(),
+            (path / "package.json").exists(),
+            (path / "go.mod").exists(),
+            (path / "pyproject.toml").exists(),
+            (path / "requirements.txt").exists(),
+            (path / "Cargo.toml").exists(),
+            (path / "composer.json").exists(),
+            (path / "Gemfile").exists(),
+            (path / "CMakeLists.txt").exists(),
             (path / "src" / "main").exists(),
         )
     )
@@ -504,6 +534,10 @@ def workflow_source(config: dict[str, Any]) -> str:
 
 def artifacts_dir(config: dict[str, Any]) -> Path:
     return Path(str(config["__workspace_root"])).resolve() / ".super-engineer"
+
+
+def active_openspec_change_path(root: Path | str) -> Path:
+    return Path(str(root)).resolve() / ".super-engineer" / "current-openspec-change.json"
 
 
 def sessions_dir(config: dict[str, Any]) -> Path:
@@ -637,10 +671,65 @@ def openspec_change_dir(config: dict[str, Any]) -> Path:
 
 
 def openspec_change_name(config: dict[str, Any]) -> str:
-    return str(config.get("openspec", {}).get("change_name", "")).strip() or openspec_change_dir(config).name
+    return str(config.get("openspec", {}).get("change_name", "")).strip()
+
+
+def validate_openspec_change_name(change_name: str) -> str:
+    normalized = str(change_name).strip()
+    if not normalized:
+        raise ValueError("OpenSpec change 名称不能为空。请使用 /se:propose <change-name> 显式指定。")
+    if "/" in normalized or "\\" in normalized:
+        raise ValueError("OpenSpec change 名称不能包含路径分隔符。")
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", normalized):
+        raise ValueError("OpenSpec change 名称必须匹配 [a-z][a-z0-9-]*，例如 demand-addition-rate。")
+    return normalized
+
+
+def select_openspec_change(config: dict[str, Any], change_name: str) -> dict[str, Any]:
+    selected_name = validate_openspec_change_name(change_name)
+    openspec = dict(config.get("openspec", {}))
+    changes_dir_text = str(openspec.get("changes_dir", "")).strip()
+    if changes_dir_text:
+        changes_dir = Path(changes_dir_text).resolve()
+    else:
+        current_dir = Path(str(openspec.get("change_dir", ""))).resolve()
+        changes_dir = current_dir if current_dir.name == "changes" else current_dir.parent
+    change_dir = changes_dir / selected_name
+    openspec.update(
+        {
+            "changes_dir": str(changes_dir),
+            "change_name": selected_name,
+            "change_dir": str(change_dir),
+            "tasks_file": str(change_dir / "tasks.md"),
+            "proposal_file": str(change_dir / "proposal.md"),
+            "design_file": str(change_dir / "design.md"),
+            "specs_dir": str(change_dir / "specs"),
+            "writeback_dir": str(change_dir / "super-engineer"),
+        }
+    )
+    config["openspec"] = openspec
+    return config
+
+
+def write_active_openspec_change(config: dict[str, Any], change_name: str) -> Path:
+    selected_name = validate_openspec_change_name(change_name)
+    active_path = active_openspec_change_path(config["__workspace_root"])
+    active_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(
+        active_path,
+        {
+            "change_name": selected_name,
+            "change_dir": str(openspec_change_dir(config)),
+            "updated_at": now_iso(),
+        },
+    )
+    return active_path
 
 
 def openspec_root(config: dict[str, Any]) -> Path:
+    changes_dir = str(config.get("openspec", {}).get("changes_dir", "")).strip()
+    if changes_dir:
+        return Path(changes_dir).resolve().parent
     return openspec_change_dir(config).parent.parent.resolve()
 
 
@@ -696,6 +785,9 @@ def collect_openspec_cli_context(config: dict[str, Any], include_apply: bool = F
         "apply_instructions": {},
         "archive_instructions": {},
     }
+    if not change_name:
+        context["error"] = "missing active OpenSpec change; run /se:propose <change-name> first"
+        return context
     if not context["available"]:
         context["error"] = "openspec CLI not found in PATH"
         return context
@@ -1415,7 +1507,144 @@ def planned_codebase(config: dict[str, Any], session_meta: dict[str, Any] | None
     return planned_codebases(config, session_meta)[0]
 
 
-def detect_project(codebase: Path) -> dict[str, str]:
+def _read_json_file(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _read_file_lower(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore").lower()
+    except OSError:
+        return ""
+
+
+def _npm_run_command(manager: str, script: str) -> str:
+    if manager == "npm":
+        return f"npm run {script}" if script not in ("test", "start") else f"npm {script}"
+    if manager == "yarn":
+        return f"yarn {script}"
+    if manager == "bun":
+        return f"bun run {script}"
+    return f"{manager} {script}"
+
+
+def _node_package_manager(codebase: Path) -> str:
+    if (codebase / "pnpm-lock.yaml").exists():
+        return "pnpm"
+    if (codebase / "yarn.lock").exists():
+        return "yarn"
+    if (codebase / "bun.lockb").exists() or (codebase / "bun.lock").exists():
+        return "bun"
+    return "npm"
+
+
+def _node_language_and_tool(codebase: Path, package_json: dict[str, Any], manager: str) -> tuple[str, str]:
+    deps: dict[str, Any] = {}
+    for key in ("dependencies", "devDependencies", "peerDependencies"):
+        value = package_json.get(key, {})
+        if isinstance(value, dict):
+            deps.update(value)
+    has_typescript = (
+        "typescript" in deps
+        or (codebase / "tsconfig.json").exists()
+        or any(codebase.glob("src/**/*.ts"))
+        or any(codebase.glob("src/**/*.tsx"))
+    )
+    framework = ""
+    for name in ("vue", "react", "next", "nuxt", "svelte", "angular"):
+        if name in deps:
+            framework = name
+            break
+    language = "typescript" if has_typescript else "javascript"
+    build_tool = f"{manager}/{framework}" if framework else manager
+    return language, build_tool
+
+
+def _node_commands(codebase: Path, package_json: dict[str, Any], manager: str) -> tuple[str, str, str]:
+    scripts = package_json.get("scripts", {})
+    scripts = scripts if isinstance(scripts, dict) else {}
+    script_names = {str(key): str(value) for key, value in scripts.items()}
+
+    def has_real_script(name: str) -> bool:
+        value = script_names.get(name, "").lower()
+        if not value:
+            return False
+        return "no test specified" not in value and "exit 1" not in value
+
+    test_command = ""
+    for name in ("test", "test:unit", "unit", "vitest", "jest"):
+        if has_real_script(name):
+            test_command = _npm_run_command(manager, name)
+            break
+    build_command = _npm_run_command(manager, "build") if has_real_script("build") else ""
+    lint_command = _npm_run_command(manager, "lint") if has_real_script("lint") else ""
+    start_command = ""
+    for name in ("dev", "start", "serve"):
+        if has_real_script(name):
+            start_command = _npm_run_command(manager, name)
+            break
+    if test_command and build_command:
+        verify_command = f"{test_command} && {build_command}"
+    else:
+        verify_command = test_command or lint_command or build_command
+    return test_command, start_command, verify_command
+
+
+def _python_commands(codebase: Path) -> tuple[str, str, str]:
+    uses_uv = (codebase / "uv.lock").exists()
+    uses_poetry = (codebase / "poetry.lock").exists() or "tool.poetry" in _read_file_lower(codebase / "pyproject.toml")
+    has_pytest = (
+        (codebase / "pytest.ini").exists()
+        or (codebase / "conftest.py").exists()
+        or "pytest" in _read_file_lower(codebase / "pyproject.toml")
+        or "pytest" in _read_file_lower(codebase / "requirements.txt")
+        or (codebase / "tests").exists()
+    )
+    prefix = "uv run " if uses_uv else "poetry run " if uses_poetry else ""
+    if has_pytest:
+        test_command = f"{prefix}python -m pytest"
+    else:
+        test_command = f"{prefix}python -m unittest discover"
+    start_command = ""
+    if (codebase / "manage.py").exists():
+        start_command = f"{prefix}python manage.py runserver"
+    elif (codebase / "app.py").exists():
+        start_command = f"{prefix}python app.py"
+    return test_command, start_command, test_command
+
+
+def _apply_verify_override(config: dict[str, Any] | None, codebase: Path, detected: dict[str, str]) -> dict[str, str]:
+    if not config:
+        return detected
+    commands = config.get("verify_commands", {})
+    if not isinstance(commands, dict) or not commands:
+        return detected
+    candidates = [
+        str(codebase.resolve()),
+        str(codebase),
+        codebase.name,
+        "default",
+    ]
+    for candidate in candidates:
+        command = str(commands.get(candidate, "")).strip()
+        if command:
+            overridden = dict(detected)
+            overridden["verify_command"] = command
+            if not overridden.get("test_command"):
+                overridden["test_command"] = command
+            return overridden
+    return detected
+
+
+def detect_project(codebase: Path, config: dict[str, Any] | None = None) -> dict[str, str]:
     has_maven = (codebase / "pom.xml").exists() or (codebase / "mvnw").exists()
     has_gradle = (
         (codebase / "build.gradle").exists()
@@ -1423,6 +1652,18 @@ def detect_project(codebase: Path) -> dict[str, str]:
         or (codebase / "gradlew").exists()
     )
     has_java = has_maven or has_gradle or (codebase / "src" / "main" / "java").exists()
+    has_node = (codebase / "package.json").exists()
+    has_go = (codebase / "go.mod").exists()
+    has_python = any(
+        (codebase / name).exists()
+        for name in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg", "Pipfile", "tox.ini")
+    ) or (codebase / "tests").exists()
+    has_rust = (codebase / "Cargo.toml").exists()
+    has_dotnet = bool(list(codebase.glob("*.sln")) or list(codebase.glob("*.csproj")))
+    has_php = (codebase / "composer.json").exists()
+    has_ruby = (codebase / "Gemfile").exists() or (codebase / "Rakefile").exists()
+    has_make = (codebase / "Makefile").exists() or (codebase / "makefile").exists()
+    has_cmake = (codebase / "CMakeLists.txt").exists()
 
     language = "java" if has_java else "unknown"
     build_tool = ""
@@ -1440,14 +1681,72 @@ def detect_project(codebase: Path) -> dict[str, str]:
         test_command = "./gradlew test" if (codebase / "gradlew").exists() else "gradle test"
         start_command = "./gradlew bootRun" if (codebase / "gradlew").exists() else "gradle bootRun"
         verify_command = test_command
+    elif has_node:
+        package_json = _read_json_file(codebase / "package.json")
+        manager = _node_package_manager(codebase)
+        language, build_tool = _node_language_and_tool(codebase, package_json, manager)
+        test_command, start_command, verify_command = _node_commands(codebase, package_json, manager)
+    elif has_go:
+        language = "go"
+        build_tool = "go"
+        test_command = "go test ./..."
+        start_command = "go run ."
+        verify_command = test_command
+    elif has_python:
+        language = "python"
+        build_tool = "uv" if (codebase / "uv.lock").exists() else "poetry" if (codebase / "poetry.lock").exists() else "python"
+        test_command, start_command, verify_command = _python_commands(codebase)
+    elif has_rust:
+        language = "rust"
+        build_tool = "cargo"
+        test_command = "cargo test"
+        start_command = "cargo run"
+        verify_command = test_command
+    elif has_dotnet:
+        language = "csharp"
+        build_tool = "dotnet"
+        test_command = "dotnet test"
+        start_command = "dotnet run"
+        verify_command = test_command
+    elif has_php:
+        language = "php"
+        build_tool = "composer"
+        composer_json = _read_json_file(codebase / "composer.json")
+        scripts = composer_json.get("scripts", {}) if isinstance(composer_json, dict) else {}
+        if isinstance(scripts, dict) and scripts.get("test"):
+            test_command = "composer test"
+        elif (codebase / "vendor" / "bin" / "phpunit").exists() or (codebase / "phpunit.xml").exists():
+            test_command = "vendor/bin/phpunit"
+        start_command = "php -S localhost:8000 -t public" if (codebase / "public").exists() else ""
+        verify_command = test_command
+    elif has_ruby:
+        language = "ruby"
+        build_tool = "bundler"
+        if (codebase / "spec").exists():
+            test_command = "bundle exec rspec"
+        elif (codebase / "test").exists():
+            test_command = "bundle exec rake test"
+        start_command = "bundle exec rails server" if (codebase / "config" / "application.rb").exists() else ""
+        verify_command = test_command
+    elif has_make:
+        language = "native"
+        build_tool = "make"
+        makefile = _read_file_lower(codebase / "Makefile") or _read_file_lower(codebase / "makefile")
+        test_command = "make test" if re.search(r"^test\s*:", makefile, flags=re.MULTILINE) else ""
+        verify_command = test_command or "make"
+    elif has_cmake:
+        language = "cpp"
+        build_tool = "cmake"
+        test_command = "ctest --test-dir build" if (codebase / "build").exists() else ""
+        verify_command = test_command
 
-    return {
+    return _apply_verify_override(config, codebase, {
         "language": language,
         "build_tool": build_tool,
         "test_command": test_command,
         "start_command": start_command,
         "verify_command": verify_command,
-    }
+    })
 
 
 def summarize_detected_projects(projects: list[dict[str, str]]) -> dict[str, str]:

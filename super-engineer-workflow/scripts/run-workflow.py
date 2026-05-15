@@ -129,8 +129,10 @@ def command_bootstrap_openspec(workspace: Path | None) -> None:
     run_python("bootstrap-openspec.py", args)
 
 
-def command_propose_openspec(workspace: Path | None) -> None:
+def command_propose_openspec(workspace: Path | None, change_name: str | None = None) -> None:
     args = ["--workspace", str(workspace)] if workspace else []
+    if change_name:
+        args.append(change_name)
     run_python("propose-openspec.py", args)
 
 
@@ -229,6 +231,7 @@ def command_verify(workspace: Path | None, timeout_seconds: int, force: bool = F
 def main() -> None:
     parser = argparse.ArgumentParser(description="super-engineer 统一工作流入口。")
     parser.add_argument("command", choices=["init", "propose-openspec", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next"])
+    parser.add_argument("change_name", nargs="?", help="配合 propose-openspec 使用的 OpenSpec change 名称。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--force", action="store_true", help="配合 verify 使用，强制重跑验证并覆盖结果。")
@@ -239,7 +242,7 @@ def main() -> None:
     if args.command == "init":
         command_init(workspace)
     elif args.command == "propose-openspec":
-        command_propose_openspec(workspace)
+        command_propose_openspec(workspace, args.change_name)
     elif args.command == "bootstrap-openspec":
         command_bootstrap_openspec(workspace)
     elif args.command == "writeback-openspec":
