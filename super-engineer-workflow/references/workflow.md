@@ -180,3 +180,5 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 - 只要阶段、阻塞、下一步动作发生变化，就更新当前会话的 `status.json`
 - 优先通过 `scripts/run-workflow.py` 推进阶段，避免手工拼接状态
 - verify 收口后，如果配置了通知，自动发送工作流完成通知，但通知失败不能覆盖真实验证结论
+- 工作流完成通知只能通过 `run-workflow.py verify` 发送，禁止 AI 手工拼接飞书 webhook 消息
+- 如果 session 已经被标记为 `done`，但缺少 `verify.json`、`notification.json` 或输出目录下的 Markdown 报告，说明前一次没有走标准收口，应通过 `/se:verify` 重新执行标准验证收口

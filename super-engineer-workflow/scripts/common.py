@@ -2166,6 +2166,11 @@ def build_feishu_notification_payload(
     pending_count = progress.get("pending_task_count", 0)
     status_emoji = "✅" if overall_result == "通过" else "❌"
     header_template = "green" if overall_result == "通过" else "red"
+    reports = {
+        "plan.md": str(report_artifact_path(config, "plan.md", session_meta)),
+        "review.md": str(report_artifact_path(config, "review.md", session_meta)),
+        "verify.md": str(report_artifact_path(config, "verify.md", session_meta)),
+    }
     return {
         "msg_type": "interactive",
         "card": {
@@ -2212,7 +2217,20 @@ def build_feishu_notification_payload(
                         "content": (
                             "**任务结果**\n"
                             f"- 阶段：`{phase_text}`\n"
-                            f"- 说明：{current_task or '暂无'}"
+                            f"- 说明：{current_task or '暂无'}\n"
+                            f"- 通知来源：`super-engineer verify`\n"
+                            f"- 报告：`plan.md` / `review.md` / `verify.md`"
+                        ),
+                        "text_align": "left",
+                        "text_size": "normal_v2",
+                    },
+                    {
+                        "tag": "markdown",
+                        "content": (
+                            "**报告路径**\n"
+                            f"- plan：`{reports['plan.md']}`\n"
+                            f"- review：`{reports['review.md']}`\n"
+                            f"- verify：`{reports['verify.md']}`"
                         ),
                         "text_align": "left",
                         "text_size": "normal_v2",

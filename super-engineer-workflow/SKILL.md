@@ -54,6 +54,8 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 - `/se:approve` 完成后必须立即停止；禁止自动调用 plan、apply、start-implement、review、verify 或修改代码
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未满足 `safe_merge` 前禁止提示 `/se:archive`
+- 工作流完成通知必须由 `python3 scripts/run-workflow.py verify` 触发，禁止 AI 手工拼接飞书 webhook 消息
+- 如果 workflow 已完成但缺少 `notification.json`、`verify.json` 或输出目录下的 Markdown 报告，必须通过 `/se:verify` 重新走标准验证收口；不要新增独立收口命令，也不要手工拼接通知
 
 门禁命令停止规则：
 
@@ -334,6 +336,7 @@ verify 收口时还必须：
 - 支持 PushPlus 原生消息和飞书原生 webhook 两条路由独立启停
 - 普通消息默认走 `wechat`
 - 飞书消息走飞书原生自定义机器人 webhook
+- 不允许 AI 直接调用 webhook 或手工构造飞书卡片；所有飞书通知必须通过脚本统一模板发送
 
 ## 资源导航
 

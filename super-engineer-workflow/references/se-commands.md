@@ -61,6 +61,7 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 - `/se:apply` 之前必须已存在桥接 todo 和 approval 标记
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未得到 `archive_ready=true` 且 `merge_mode=safe_merge` 前禁止提示 `/se:archive`
+- 工作流完成通知必须通过标准脚本发送，禁止 AI 手工拼接飞书 webhook 消息
 
 `todo` 模式允许的阶段流转：
 
