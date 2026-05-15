@@ -451,7 +451,11 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         configured_change_dir = resolve_workspace_path(root, change_dir_raw) if change_dir_raw not in ("", None) else None
 
         active_change = read_json(active_openspec_change_path(root), {})
+        bridge_context = read_json(root / ".super-engineer" / "openspec-bridge-context.json", {})
+        se_state = read_json(root / ".super-engineer" / "se-state.json", {})
         active_change_name = str(active_change.get("change_name", "")).strip()
+        bridge_change_name = str(bridge_context.get("change_name", "")).strip()
+        state_change_name = str(se_state.get("current_change", "")).strip()
         configured_change_name = str(openspec_raw.get("change_name", "")).strip()
 
         if changes_dir is None:
@@ -460,14 +464,18 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
             else:
                 changes_dir = (root / "openspec" / "changes").resolve()
 
-        if active_change_name:
-            change_name = active_change_name
+        inferred_change_name = active_change_name or configured_change_name or state_change_name or bridge_change_name
+        if inferred_change_name and not re.fullmatch(r"[a-z][a-z0-9-]*", inferred_change_name):
+            inferred_change_name = ""
+
+        if inferred_change_name:
+            change_name = inferred_change_name
             change_dir = changes_dir / change_name
         elif configured_change_dir is not None and configured_change_dir.name != "changes":
             change_dir = configured_change_dir
             change_name = configured_change_name or change_dir.name
         else:
-            change_name = configured_change_name
+            change_name = ""
             change_dir = changes_dir / change_name if change_name else changes_dir
 
         tasks_file = resolve_workspace_path(root, openspec_raw.get("tasks_file", change_dir / "tasks.md"))
@@ -704,6 +712,98 @@ def _se_state_artifact_exists(path_text: str) -> bool:
     return bool(path_text and Path(path_text).exists())
 
 
+def recover_se_state_from_artifacts(config: dict[str, Any]) -> dict[str, Any]:
+    if workflow_source(config) != "openspec":
+        return {"phase": "", "allowed_next": []}
+    state = read_se_state(config)
+    if se_state_path(config).exists() and str(state.get("phase", "")).strip() != "draft":
+        return state
+
+    artifacts = dict(state.get("artifacts", {}) if isinstance(state.get("artifacts"), dict) else {})
+    phase = "draft"
+    last_command = ""
+    try:
+        proposal = openspec_change_dir(config) / "proposal.md"
+        design = openspec_change_dir(config) / "design.md"
+        tasks = openspec_tasks_path(config)
+        if proposal.exists() or design.exists() or tasks.exists():
+            artifacts.update(
+                {
+                    "proposal": str(proposal),
+                    "design": str(design),
+                    "tasks": str(tasks),
+                    "change_dir": str(openspec_change_dir(config)),
+                }
+            )
+        if proposal.exists() and design.exists() and tasks.exists():
+            phase = "proposed"
+            last_command = "/se:propose"
+    except Exception:
+        pass
+
+    try:
+        todo_file = todo_path(config)
+        todo_text = read_text(todo_file)
+        if todo_file.exists() and not is_todo_template_placeholder(todo_text):
+            artifacts["todo"] = str(todo_file)
+            phase = "bridged"
+            last_command = "/se:bridge"
+    except Exception:
+        pass
+
+    try:
+        session_meta = current_session_meta(config)
+        plan_path = data_artifact_path(config, "plan.json", session_meta)
+        self_check_path = data_artifact_path(config, "self-check.json", session_meta)
+        review_path = data_artifact_path(config, "review.json", session_meta)
+        verify_path = data_artifact_path(config, "verify.json", session_meta)
+        notification_path = data_artifact_path(config, "notification.json", session_meta)
+        if plan_path.exists():
+            artifacts["plan_json"] = str(plan_path)
+            artifacts["plan_md"] = str(report_artifact_path(config, "plan.md", session_meta))
+            phase = "planned"
+            last_command = "/se:plan"
+        if self_check_path.exists():
+            artifacts["self_check_json"] = str(self_check_path)
+            artifacts["self_check_md"] = str(report_artifact_path(config, "self-check.md", session_meta))
+            phase = "self_checked"
+            last_command = "/se:apply"
+        if review_path.exists():
+            artifacts["review_json"] = str(review_path)
+            artifacts["review_md"] = str(report_artifact_path(config, "review.md", session_meta))
+            phase = "reviewed"
+            last_command = "/se:review"
+        if verify_path.exists():
+            artifacts["verify_json"] = str(verify_path)
+            artifacts["verify_md"] = str(report_artifact_path(config, "verify.md", session_meta))
+            artifacts["notification_json"] = str(notification_path)
+            verify = read_json(verify_path, {})
+            status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
+            notification = read_json(notification_path, {})
+            overall_result = str(verify.get("result") or verify.get("overall_result") or "").strip()
+            if overall_result == "通过" and is_standard_workflow_notification(config, session_meta, status, overall_result, notification):
+                phase = "verified"
+                last_command = "/se:verify"
+            else:
+                phase = "reviewed"
+                last_command = "/se:review"
+    except Exception:
+        pass
+
+    if phase != "draft":
+        state.update(
+            {
+                "phase": phase,
+                "last_command": last_command,
+                "current_change": openspec_change_name(config),
+                "blocked_reason": "",
+                "artifacts": artifacts,
+            }
+        )
+        write_se_state(config, state)
+    return read_se_state(config)
+
+
 def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any]:
     if workflow_source(config) != "openspec":
         return {"valid": True, "phase": "", "allowed_next": []}
@@ -713,7 +813,7 @@ def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any
     if se_command == "/se:propose":
         return {"valid": True, "phase": read_se_state(config).get("phase", "draft"), "allowed_next": ["/se:propose"]}
 
-    state = read_se_state(config)
+    state = recover_se_state_from_artifacts(config)
     phase = str(state.get("phase", "") or "draft").strip()
     allowed_next = [str(item) for item in state.get("allowed_next", [])]
     artifacts = state.get("artifacts", {})

@@ -18,6 +18,7 @@ from common import (
     read_json,
     require_se_state,
     report_artifact_path,
+    recover_se_state_from_artifacts,
     se_state_path,
     todo_path,
     update_se_state,
@@ -76,6 +77,7 @@ def update_status_for_implement(workspace: Path | None, current_task: str, next_
 
 def command_status(workspace: Path | None) -> None:
     config = load_workspace_config(workspace)
+    recover_se_state_from_artifacts(config)
     try:
         status, _ = load_status(workspace)
     except FileNotFoundError:

@@ -10,6 +10,7 @@ from common import (
     format_duration,
     load_workspace_config,
     now_iso,
+    openspec_bridge_context_path,
     openspec_change_dir,
     openspec_writeback_dir,
     read_json,
@@ -21,24 +22,41 @@ from common import (
 )
 
 
+def list_items(value: object) -> list[object]:
+    if isinstance(value, list):
+        return value
+    return []
+
+
 def summarize_review(review: dict) -> list[str]:
-    findings = review.get("findings", [])
+    findings = list_items(review.get("findings", []))
     if not findings:
         return ["暂无 review finding。"]
     lines: list[str] = []
     for item in findings[:8]:
-        lines.append(f"[{item.get('severity', 'info')}] {item.get('title', '')}：{item.get('detail', '')}")
+        if isinstance(item, dict):
+            lines.append(f"[{item.get('severity', 'info')}] {item.get('title', '')}：{item.get('detail', '')}")
+        else:
+            lines.append(f"[info] {str(item)}")
     return lines
 
 
 def summarize_verify(verify: dict) -> list[str]:
-    sections = verify.get("sections", [])
+    sections = list_items(verify.get("sections", []))
     if not sections:
         return ["暂无 verify 明细。"]
     lines: list[str] = []
     for section in sections[:8]:
+        if not isinstance(section, dict):
+            lines.append(str(section))
+            continue
+        duration = section.get("duration", 0)
+        try:
+            duration_text = f"{float(duration):.2f}"
+        except (TypeError, ValueError):
+            duration_text = "0.00"
         lines.append(
-            f"{section.get('name', 'unknown')}：{section.get('result', '')}，退出码 {section.get('exit_code', '')}，耗时 {section.get('duration', 0):.2f} 秒"
+            f"{section.get('name', 'unknown')}：{section.get('result', '')}，退出码 {section.get('exit_code', '')}，耗时 {duration_text} 秒"
         )
     return lines
 
@@ -47,11 +65,18 @@ def summarize_acceptance(plan: dict, verify: dict) -> list[dict[str, object]]:
     verify_result = str(verify.get("result", "missing"))
     status = "passed" if verify_result == "通过" else "pending"
     items: list[dict[str, object]] = []
-    for criterion in plan.get("acceptance_criteria", []):
-        checks = [str(item) for item in criterion.get("checks", [])]
+    for criterion in list_items(plan.get("acceptance_criteria", [])):
+        if isinstance(criterion, dict):
+            task_title = str(criterion.get("task_title") or criterion.get("title") or criterion.get("name") or "")
+            checks = [str(item) for item in list_items(criterion.get("checks", []))]
+        else:
+            task_title = str(criterion)
+            checks = []
+        if not task_title.strip():
+            task_title = "未命名验收项"
         items.append(
             {
-                "task_title": str(criterion.get("task_title", "")),
+                "task_title": task_title,
                 "status": status,
                 "checks": checks,
             }
@@ -60,17 +85,28 @@ def summarize_acceptance(plan: dict, verify: dict) -> list[dict[str, object]]:
 
 
 def infer_spec_impacts(plan: dict, bridge_context: dict) -> list[str]:
-    impacts = [str(item) for item in bridge_context.get("spec_reference_files", []) if str(item).strip()]
+    impacts = [str(item) for item in list_items(bridge_context.get("spec_reference_files", [])) if str(item).strip()]
     if impacts:
         return impacts
-    return [str(item.get("path", "")) for item in plan.get("target_codebases", []) if str(item.get("path", "")).strip()]
+    paths: list[str] = []
+    for item in list_items(plan.get("target_codebases", [])):
+        if isinstance(item, dict):
+            path = str(item.get("path", "")).strip()
+        else:
+            path = str(item).strip()
+        if path:
+            paths.append(path)
+    return paths
 
 
 def residual_risks(plan: dict, review: dict, verify: dict) -> list[str]:
-    risks = [str(item) for item in plan.get("risks", []) if str(item).strip()]
-    for finding in review.get("findings", []):
-        if str(finding.get("severity", "")) in ("warning", "blocker"):
-            risks.append(str(finding.get("detail", "")))
+    risks = [str(item) for item in list_items(plan.get("risks", [])) if str(item).strip()]
+    for finding in list_items(review.get("findings", [])):
+        if isinstance(finding, dict):
+            if str(finding.get("severity", "")) in ("warning", "blocker"):
+                risks.append(str(finding.get("detail", "")))
+        elif str(finding).strip():
+            risks.append(str(finding))
     if verify.get("result") not in ("通过", "", None):
         risks.append(f"验证结果未通过：{verify.get('result')}")
     return risks[:12]
@@ -92,10 +128,13 @@ def build_markdown(payload: dict) -> str:
         "",
         "## Repositories",
     ]
-    repos = payload.get("plan", {}).get("target_codebases", [])
+    repos = list_items(payload.get("plan", {}).get("target_codebases", []))
     if repos:
         for repo in repos:
-            lines.append(f"- {repo.get('name', '')}: {repo.get('path', '')}")
+            if isinstance(repo, dict):
+                lines.append(f"- {repo.get('name', '')}: {repo.get('path', '')}")
+            else:
+                lines.append(f"- {str(repo)}")
     else:
         lines.append("- 暂无")
     lines.extend([
@@ -137,6 +176,10 @@ def main() -> None:
     verify = read_json(data_artifact_path(config, "verify.json", session_meta), {})
     status = read_json(data_artifact_path(config, "status.json", session_meta), {})
     plan_bridge_context = plan.get("bridge_context", {})
+    if not isinstance(plan_bridge_context, dict) or not plan_bridge_context:
+        plan_bridge_context = read_json(openspec_bridge_context_path(config), {})
+    if not isinstance(plan_bridge_context, dict):
+        plan_bridge_context = {}
     archive_ready = bool(
         review.get("result") == "passed"
         and verify.get("result") == "通过"
