@@ -26,6 +26,15 @@
 
 AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步，不能为了“方便”跳过门禁。
 
+“提示下一步”和“执行下一步”必须严格区分：
+
+- 提示下一步：只在回复里告诉用户下一条建议命令
+- 执行下一步：调用脚本、修改状态、生成计划、实现代码、审查或验证
+
+除非用户当前消息明确请求该命令，否则 AI 只能提示下一步，不能执行下一步。
+
+`auto` 模式只影响 `/se:apply` 内部从实现到验证的连续推进，不允许让 `/se:propose`、`/se:bridge`、`/se:approve` 自动串到 `/se:apply`。
+
 `openspec` 模式允许的阶段流转：
 
 ```text
@@ -47,6 +56,8 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 - `/se:bridge` 完成后禁止提示 `/se:apply`
 - `/se:bridge` 完成后必须提示先人工审核 todo，再 `/se:approve`
 - `/se:approve` 之前禁止执行 `/se:plan` 或 `/se:apply`
+- `/se:approve` 完成后必须停止，禁止自动执行 `/se:plan` 或 `/se:apply`
+- `/se:approve` 完成后禁止调用任何会修改代码、生成计划、审查或验证的脚本
 - `/se:apply` 之前必须已存在桥接 todo 和 approval 标记
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未得到 `archive_ready=true` 且 `merge_mode=safe_merge` 前禁止提示 `/se:archive`
@@ -61,6 +72,17 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 ```
 
 如果用户要求跳过上述顺序，AI 必须停止并说明缺失的前置条件。
+
+命令完成后的停止规则：
+
+| 命令 | 完成后是否必须停止 | 允许的下一步提示 | 禁止自动执行 |
+| --- | --- | --- | --- |
+| `/se:init` | 是 | `/se:propose <change-name>`、`/se:plan` 或 `/se:apply` | 后续所有命令 |
+| `/se:propose <change-name>` | 是 | `/se:bridge` | `/se:approve`、`/se:plan`、`/se:apply`、代码实现 |
+| `/se:bridge` | 是 | 人工审核 todo 后 `/se:approve` | `/se:approve`、`/se:plan`、`/se:apply` |
+| `/se:approve` | 是 | `/se:plan` 或 `/se:apply` | `/se:plan`、`/se:apply`、`start-implement`、代码实现、review、verify |
+| `/se:plan` | 是 | `/se:apply` | 代码实现、review、verify |
+| `/se:archive-check` | 是 | 满足 safe_merge 时 `/se:archive` | `/se:archive` |
 
 ## 状态模型
 
@@ -244,13 +266,24 @@ blocked
 
 - 写入 `<workspace>/.super-engineer/openspec-todo-approval.json`
 - 状态进入 `todo_approved`
+- 不执行 `python3 scripts/run-workflow.py plan`
+- 不执行 `python3 scripts/run-workflow.py start-implement`
+- 不执行任何代码修改、自查、审查或验证
 
 完成后汇报：
 
 - 已审核的 todo 路径
 - 下一步建议 `/se:plan` 或 `/se:apply`
 
-完成后禁止直接提示 `/se:archive-check` 或 `/se:archive`。
+完成后必须立即停止。
+
+完成后禁止：
+
+- 自动执行 `/se:plan`
+- 自动执行 `/se:apply`
+- 自动开始实现
+- 自动执行 review 或 verify
+- 直接提示 `/se:archive-check` 或 `/se:archive`
 
 如果用户没有明确审核通过，不能替用户执行 `/se:approve`。
 

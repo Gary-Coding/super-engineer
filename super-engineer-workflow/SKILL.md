@@ -38,10 +38,12 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 
 - 不要把 `/se:*` 映射为 OpenSpec 官方 `/opsx:*`
 - 不要要求用户自己执行底层脚本
+- 每次只能执行用户当前消息中明确请求的 `/se:*` 命令；“下一步建议”只能作为文字建议，绝不能自动执行下一步命令
 - `openspec` 模式下，`/se:bridge` 生成的桥接 todo 必须先经过 `/se:approve` 才能进入交付阶段
 - 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，不要假设固定文件名；如果用户没有特殊要求，推荐使用 `todo.md`
 - `manual` 模式下，计划、实现、审查后按门禁停留
 - `auto` 模式下，除非出现硬阻塞，否则连续推进
+- `auto` 模式只在 `/se:apply` 命令内部生效；`/se:init`、`/se:propose`、`/se:bridge`、`/se:approve`、`/se:plan` 都必须在各自阶段完成后停止
 - `/se:archive` 只能在 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时继续
 - 当前置条件不满足时，停止该命令并明确说明缺少什么、应该先执行哪个 `/se:*` 命令
 - `/se:propose` 必须显式携带 OpenSpec change 名称，例如 `/se:propose demand-addition-rate`；AI 不得根据需求标题或 `demand_name` 自行推导 change 名称
@@ -49,8 +51,18 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 - `/se:propose` 完成后只能提示下一步 `/se:bridge`，禁止提示 `/se:apply`
 - `/se:bridge` 完成后只能提示人工审核 todo，再 `/se:approve`，禁止提示 `/se:apply`
 - `/se:approve` 之前禁止执行或建议 `/se:plan`、`/se:apply`
+- `/se:approve` 完成后必须立即停止；禁止自动调用 plan、apply、start-implement、review、verify 或修改代码
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未满足 `safe_merge` 前禁止提示 `/se:archive`
+
+门禁命令停止规则：
+
+- `/se:init`：完成初始化后停止
+- `/se:propose <change-name>`：完成规格产物后停止
+- `/se:bridge`：生成桥接 todo 后停止
+- `/se:approve`：写入审核标记后停止
+- `/se:plan`：生成计划后停止，除非用户当前命令就是 `/se:apply`
+- `/se:archive-check`：完成归档检查后停止
 
 ## 先读取这些输入
 
