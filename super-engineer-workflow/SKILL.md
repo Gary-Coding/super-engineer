@@ -1,6 +1,6 @@
 ---
 name: super-engineer-workflow
-description: Use this skill when the user wants an engineering workflow in the current workspace. It supports `todo` mode and OpenSpec-bridged mode via `workspace.yml`, reads the configured todo file, reference files, code path, and output directory, reads `~/.super-engineer/skill-config.yml` for skill-level settings such as notifications, creates a new archived session for each workflow run, writes AI data into .super-engineer, writes human-readable markdown reports into the configured output directory, and records total workflow duration.
+description: Use this skill whenever the user sends a `/se:*` workflow command such as `/se:propose <change-name>`, `/se:bridge`, `/se:approve`, `/se:apply`, `/se:verify`, or `/se:archive`, or asks to run the super-engineer workflow in a workspace. These `/se:*` strings are AI workflow commands, not normal chat text and not shell commands. The skill supports `todo` mode and OpenSpec-bridged mode via `workspace.yml`, reads configured demand/todo/reference/code/output paths, creates archived sessions in `.super-engineer`, writes Markdown reports, supports OpenSpec writeback/archive, and runs verification.
 ---
 
 # Super Engineer Workflow
