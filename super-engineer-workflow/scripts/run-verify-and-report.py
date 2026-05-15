@@ -14,13 +14,13 @@ from common import (
     ensure_status,
     format_duration,
     load_workspace_config,
+    is_standard_workflow_notification,
     notify_workflow_result,
     now_iso,
     phase_after,
     planned_codebases,
     read_json,
     report_artifact_path,
-    workflow_notification_fingerprint,
     workflow_duration_seconds,
     write_json,
     write_text,
@@ -41,13 +41,10 @@ def has_sent_standard_notification(
     notification = read_json(notification_path, {})
     if not isinstance(verify, dict) or not isinstance(notification, dict):
         return False
-    if str(notification.get("status", "")).strip() != "sent":
-        return False
     overall_result = str(verify.get("result", "")).strip()
     if not overall_result:
         return False
-    expected_fingerprint = workflow_notification_fingerprint(session_meta, status, overall_result)
-    return str(notification.get("fingerprint", "")).strip() == expected_fingerprint
+    return is_standard_workflow_notification(config, session_meta, status, overall_result, notification)
 
 
 def tail(text: str, lines: int = 20) -> list[str]:

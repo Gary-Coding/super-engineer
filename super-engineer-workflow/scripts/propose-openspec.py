@@ -6,6 +6,7 @@ from pathlib import Path
 
 from common import (
     demand_path,
+    existing_reference_files,
     load_workspace_config,
     openspec_change_dir,
     openspec_change_name,
@@ -14,6 +15,7 @@ from common import (
     read_text,
     run_openspec_cli,
     select_openspec_change,
+    update_se_state,
     validate_openspec_change_name,
     workflow_source,
     workspace_root,
@@ -45,6 +47,13 @@ def main() -> None:
     writeback_dir = openspec_writeback_dir(config)
     demand_file = demand_path(config)
     demand_text = read_text(demand_file) if demand_file else ""
+    reference_contexts = [
+        {
+            "path": item,
+            "content": read_text(Path(item)),
+        }
+        for item in existing_reference_files(config)
+    ]
 
     commands: list[dict] = []
     if openspec_cli_available():
@@ -78,9 +87,10 @@ def main() -> None:
         "active_change_file": str(active_change_file),
         "demand_file": str(demand_file) if demand_file else "",
         "demand_text": demand_text,
+        "reference_files": reference_contexts,
         "openspec_cli_available": openspec_cli_available(),
         "commands": commands,
-        "next_action": "Use demand_text and OpenSpec instructions to create or update proposal.md, design.md, tasks.md, and specs/.",
+        "next_action": "Use demand_text, reference_files, and OpenSpec instructions to create or update proposal.md, design.md, tasks.md, and specs/.",
     }
     write_json(writeback_dir / "propose-input.json", payload)
     write_text(
@@ -98,13 +108,42 @@ def main() -> None:
                 "",
                 demand_text or "未配置或未找到 demand_file。",
                 "",
+                "## Reference Files",
+                "",
+                "\n\n".join(
+                    [
+                        "\n".join(
+                            [
+                                f"### {item['path']}",
+                                "",
+                                item["content"] or "文件为空或无法读取。",
+                            ]
+                        )
+                        for item in reference_contexts
+                    ]
+                )
+                or "未配置或未找到 reference_files。",
+                "",
             ]
         ),
+    )
+    update_se_state(
+        config,
+        phase="proposed",
+        last_command="/se:propose",
+        artifacts={
+            "proposal": str(change_dir / "proposal.md"),
+            "design": str(change_dir / "design.md"),
+            "tasks": str(change_dir / "tasks.md"),
+            "change_dir": str(change_dir),
+            "propose_input": str(writeback_dir / "propose-input.json"),
+        },
     )
     print(f"change_name={change_name}")
     print(f"change_dir={change_dir}")
     print(f"active_change_file={active_change_file}")
     print(f"demand_file={demand_file or ''}")
+    print(f"reference_files={len(reference_contexts)}")
     print(f"openspec_cli_available={str(openspec_cli_available()).lower()}")
     print(f"propose_input={writeback_dir / 'propose-input.json'}")
 

@@ -22,6 +22,8 @@
 
 其中 `demand_file` 可选，主要作为 `/se:propose` 的原始需求输入。以上路径可以使用相对路径或绝对路径。相对路径按当前工作空间根目录解析。
 
+`workspace.yml` 是用户维护的工作空间契约。AI 只能读取和校验该文件，禁止自动编辑、重写或格式化它。如果配置需要调整，AI 必须停止并说明需要用户修改的字段。
+
 `workspace.yml` 支持可选 `verify_commands`。当项目自动识别出的验证命令不准确，或团队希望固定验证命令时，可以配置：
 
 ```yaml
@@ -90,6 +92,7 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 
 - `openspec` 模式下，`/se:propose` 优先读取它生成或完善 change
 - `reference_files` 是技术参考资料，不应该用来猜测哪个文件是原始需求
+- `openspec` 模式下，`/se:propose` 必须读取真实存在的 `reference_files`，并把内容写入 `propose-input.json` / `propose-input.md`，作为生成 `proposal.md`、`design.md`、`tasks.md` 的上下文
 
 `code_path` 可以是：
 
@@ -119,6 +122,7 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 工作空间内部只保存给 AI 使用的数据：
 
 - `<workspace>/.super-engineer/current-session.json`
+- `<workspace>/.super-engineer/se-state.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/discovery.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/plan.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/self-check.json`
@@ -138,8 +142,23 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 
 - `<workspace>/.super-engineer/sessions/<session_id>/notification.json`
 
+通知验收规则：
+
+- `notification.json` 是唯一通知证据
+- `status.json.notification_status` 只是摘要，不能单独作为通知成功依据
+- 通知只能由 `run-workflow.py verify` 调用 `run-verify-and-report.py` 和 `common.notify_workflow_result()` 发送
+- AI 禁止直接调用飞书 webhook，禁止手工拼接飞书卡片 JSON
+- 启用飞书时，`notification.json` 必须包含 `source=run-workflow.py verify`、fingerprint 匹配、`route=feishu`、`template=interactive`、`status=sent` 的结果，才算飞书通知成功
+
 ## 会话规则
 
+- OpenSpec 模式下，`se-state.json` 是脚本状态机，记录 `phase`、`allowed_next`、`current_change`、`last_command` 和关键产物路径
+- `/se:propose` 后状态为 `proposed`，只允许 `/se:bridge`
+- `/se:bridge` 后状态为 `bridged`，允许 `/se:apply` 或 `/se:plan`
+- `/se:plan` 后状态为 `planned`，只允许 `/se:apply`
+- `/se:verify` 通过后状态为 `verified`，只允许 `/se:archive-check`
+- `/se:archive-check` 通过后状态为 `archive_ready`，只允许 `/se:archive`
+- 所有阶段推进必须先通过 `run-workflow.py validate-state <command>` 等价校验，不能只依赖 AI 回复
 - 每次执行 `plan` 都必须创建新的 `session_id`
 - 新会话不能覆盖历史会话目录
 - `current-session.json` 只指向当前正在推进的会话
@@ -152,6 +171,7 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 - `prepare-archive-openspec` 会检测 spec baseline 是否发生变化；只有 `merge_mode=safe_merge` 才允许自动归档
 - `auto` 模式下，除非进入硬阻塞，否则不能在对话里要求用户批准继续
 - 工作流总耗时按当前会话开始到 verify 收口结束的真实墙钟时间计算
+- AI 禁止编辑 `<workspace>/workspace.yml`
 - AI 禁止直接写 `.super-engineer/current-session.json`、`.super-engineer/sessions/**/status.json`、`plan.json`、`review.json`、`verify.json`、`notification.json` 和 output 下的标准 Markdown 报告；这些标准产物只能由脚本生成
 
 ## 硬阻塞定义
@@ -181,5 +201,5 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 - 只要阶段、阻塞、下一步动作发生变化，就更新当前会话的 `status.json`
 - 必须通过 `scripts/run-workflow.py` 推进阶段，避免手工拼接状态
 - verify 收口后，如果配置了通知，自动发送工作流完成通知，但通知失败不能覆盖真实验证结论
-- 工作流完成通知只能通过 `run-workflow.py verify` 发送，禁止 AI 手工拼接飞书 webhook 消息
+- 工作流完成通知只能通过 `run-workflow.py verify` 发送，禁止 AI 直接调用飞书 webhook，禁止 AI 手工拼接飞书卡片 JSON
 - 如果 session 已经被标记为 `done`，但缺少 `verify.json`、`notification.json` 或输出目录下的 Markdown 报告，说明前一次没有走标准收口，应通过 `/se:verify` 重新执行标准验证收口

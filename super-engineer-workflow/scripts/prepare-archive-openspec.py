@@ -11,6 +11,7 @@ from common import (
     openspec_writeback_dir,
     collect_openspec_cli_context,
     read_json,
+    update_se_state,
     workflow_source,
     workspace_root,
     write_json,
@@ -147,6 +148,16 @@ def main() -> None:
     }
     write_json(writeback_dir / "archive-input.json", payload)
     write_text(writeback_dir / "merge-preview.md", build_markdown(payload))
+    update_se_state(
+        config,
+        phase="archive_ready" if payload["archive_ready"] and merge_mode == "safe_merge" else "blocked",
+        last_command="/se:archive-check",
+        artifacts={
+            "archive_input": str(writeback_dir / "archive-input.json"),
+            "merge_preview": str(writeback_dir / "merge-preview.md"),
+        },
+        blocked_reason="; ".join(blockers),
+    )
     print(f"archive_ready={str(payload['archive_ready']).lower()}")
     print(f"writeback_dir={writeback_dir}")
 

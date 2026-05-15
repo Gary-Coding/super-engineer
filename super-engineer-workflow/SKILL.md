@@ -1,6 +1,6 @@
 ---
 name: super-engineer-workflow
-description: Use this skill whenever the user sends a `/se:*` workflow command such as `/se:propose <change-name>`, `/se:bridge`, `/se:approve`, `/se:apply`, `/se:verify`, or `/se:archive`, or asks to run the super-engineer workflow in a workspace. These `/se:*` strings are AI workflow commands, not normal chat text and not shell commands. The skill supports `todo` mode and OpenSpec-bridged mode via `workspace.yml`, reads configured demand/todo/reference/code/output paths, creates archived sessions in `.super-engineer`, writes Markdown reports, supports OpenSpec writeback/archive, and runs verification.
+description: Mandatory for any user message that starts with `/se:` or asks to run a super-engineer workflow. Treat `/se:*` strings such as `/se:init`, `/se:propose <change-name>`, `/se:bridge`, `/se:plan`, `/se:apply`, `/se:review`, `/se:verify`, `/se:archive-check`, `/se:archive`, and `/se:status` as super-engineer workflow commands, not chat text, not shell commands, and not OpenSpec `/opsx:*` commands. The skill supports todo mode and OpenSpec-bridged mode via `workspace.yml`, reads configured demand/todo/reference/code/output paths, creates archived sessions in `.super-engineer`, enforces `se-state.json`, writes Markdown reports, supports OpenSpec writeback/archive, and runs verification.
 ---
 
 # Super Engineer Workflow
@@ -9,7 +9,18 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 
 ## `/se:*` 专属命令协议
 
-如果用户输入以 `/se:` 开头，必须优先按 [references/se-commands.md](references/se-commands.md) 解释，而不是把它当普通自然语言。
+如果用户消息以 `/se:` 开头，或者消息中明确要求处理 `/se:*`，必须立即使用本 skill。
+
+识别规则：
+
+- `/se:*` 是 super-engineer 的 AI 工作流命令
+- `/se:*` 不是普通聊天文本
+- `/se:*` 不是 shell 命令
+- `/se:*` 不是 OpenSpec 官方 `/opsx:*` 命令
+- 不要回复“有什么可以帮你”这类泛化聊天
+- 不要要求用户解释 `/se:*` 是什么
+- 不要把 `/se:*` 翻译成其他命令前缀
+- 必须按 [references/se-commands.md](references/se-commands.md) 解释并推进
 
 `/se:*` 是用户发给 AI 的工作流指令，不是 shell 命令。AI 必须：
 
@@ -25,7 +36,6 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 - `/se:init`
 - `/se:propose <change-name>`
 - `/se:bridge`
-- `/se:approve`
 - `/se:plan`
 - `/se:apply`
 - `/se:review`
@@ -38,35 +48,39 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 
 - 不要把 `/se:*` 映射为 OpenSpec 官方 `/opsx:*`
 - 不要要求用户自己执行底层脚本
+- 禁止 AI 编辑 `<workspace>/workspace.yml`；`workspace.yml` 是用户维护的工作空间契约，只能读取和校验，不能自动修改
 - 禁止 AI 直接创建、修改或伪造 `.super-engineer/current-session.json`、`.super-engineer/sessions/**/status.json`、`plan.json`、`review.json`、`verify.json`、`notification.json` 等工作流状态产物；这些文件只能由本 skill 脚本写入
 - 禁止 AI 直接在 `output_dir/<session_id>/` 下手工补写 `discovery.md`、`plan.md`、`self-check.md`、`review.md`、`verify.md` 等标准报告；这些标准报告只能由对应脚本生成
 - 如果发现当前 session 缺少标准 JSON 或 Markdown 产物，不得手工补文件；必须通过 `/se:plan`、`/se:review`、`/se:verify` 或重新创建标准 session 来恢复
 - 每次只能执行用户当前消息中明确请求的 `/se:*` 命令；“下一步建议”只能作为文字建议，绝不能自动执行下一步命令
-- `openspec` 模式下，`/se:bridge` 生成的桥接 todo 必须先经过 `/se:approve` 才能进入交付阶段
+- `openspec` 模式下，`/se:bridge` 生成的桥接 todo 必须先经过人工审核；用户审核后直接发送 `/se:apply` 进入交付阶段
 - 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，不要假设固定文件名；如果用户没有特殊要求，推荐使用 `todo.md`
 - `manual` 模式下，计划、实现、审查后按门禁停留
 - `auto` 模式下，除非出现硬阻塞，否则连续推进
-- `auto` 模式只在 `/se:apply` 命令内部生效；`/se:init`、`/se:propose`、`/se:bridge`、`/se:approve`、`/se:plan` 都必须在各自阶段完成后停止
+- `auto` 模式只在 `/se:apply` 命令内部生效；`/se:init`、`/se:propose`、`/se:bridge`、`/se:plan` 都必须在各自阶段完成后停止
 - `/se:archive` 只能在 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时继续
 - 当前置条件不满足时，停止该命令并明确说明缺少什么、应该先执行哪个 `/se:*` 命令
 - `/se:propose` 必须显式携带 OpenSpec change 名称，例如 `/se:propose demand-addition-rate`；AI 不得根据需求标题或 `demand_name` 自行推导 change 名称
-- `/se:propose <change-name>` 应先执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json` 和 `demand_file` 生成或完善 OpenSpec artifacts
+- `/se:propose <change-name>` 应先执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json`、`demand_file` 和 `reference_files` 生成或完善 OpenSpec artifacts
 - `/se:propose` 完成后只能提示下一步 `/se:bridge`，禁止提示 `/se:apply`
-- `/se:bridge` 完成后只能提示人工审核 todo，再 `/se:approve`，禁止提示 `/se:apply`
-- `/se:approve` 之前禁止执行或建议 `/se:plan`、`/se:apply`
-- `/se:approve` 完成后必须立即停止；禁止自动调用 plan、apply、start-implement、review、verify 或修改代码
+- `/se:propose` 的完成回复中禁止出现“确认无误后执行 `/se:apply`”“通过 `/se:apply` 进入实现阶段”等表达；如果需要提示后续，只能写“下一步：执行 `/se:bridge` 生成待审核 todo”
+- `/se:bridge` 完成后只能提示人工审核 todo，审核通过后发送 `/se:apply`；禁止自动执行 `/se:apply`
+- `/se:bridge` 完成后禁止自动调用 plan、apply、start-implement、review、verify 或修改代码
 - `/se:apply` 必须通过标准脚本序列推进：必要时先 `python3 scripts/run-workflow.py plan`，然后 `start-implement`，代码实现完成后 `finish-implement`，`auto` 模式下继续 `review` 和 `verify`；禁止只手工写状态或只手工发送通知后宣布完成
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未满足 `safe_merge` 前禁止提示 `/se:archive`
-- 工作流完成通知必须由 `python3 scripts/run-workflow.py verify` 触发，禁止 AI 手工拼接飞书 webhook 消息
+- 工作流完成通知必须由 `python3 scripts/run-workflow.py verify` 触发，禁止 AI 直接调用飞书 webhook，禁止 AI 手工拼接飞书卡片 JSON
+- `notification.json` 是唯一通知证据；启用飞书时，只有 `notification.json` 中存在 `source=run-workflow.py verify`、fingerprint 匹配、`route=feishu`、`template=interactive`、`status=sent` 的结果，才算飞书通知成功
+- `status.json` 中的 `notification_status=sent` 不能单独作为通知成功依据
 - 如果 workflow 已完成但缺少 `notification.json`、`verify.json` 或输出目录下的 Markdown 报告，必须通过 `/se:verify` 重新走标准验证收口；不要新增独立收口命令，也不要手工拼接通知
+- OpenSpec 模式必须使用 `<workspace>/.super-engineer/se-state.json` 作为阶段状态机；执行 `/se:bridge`、`/se:plan`、`/se:apply`、`/se:verify`、`/se:archive-check`、`/se:archive` 前必须通过脚本状态校验
+- AI 不能自行决定下一步命令，只能依据 `se-state.json.allowed_next` 汇报下一步；如果用户请求的命令不在允许范围内，必须停止并说明当前 `phase` 和允许命令
 
 门禁命令停止规则：
 
 - `/se:init`：完成初始化后停止
 - `/se:propose <change-name>`：完成规格产物后停止
 - `/se:bridge`：生成桥接 todo 后停止
-- `/se:approve`：写入审核标记后停止
 - `/se:plan`：生成计划后停止，除非用户当前命令就是 `/se:apply`
 - `/se:archive-check`：完成归档检查后停止
 
@@ -87,8 +101,10 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 ## 强约束
 
 - 工作空间根目录必须存在 `workspace.yml`
+- AI 只能读取和校验 `workspace.yml`，禁止自动编辑、重写或格式化该文件；如果配置需要变更，必须停下并让用户处理
 - `todo_file`、`reference_files`、`code_path`、`output_dir` 可以使用相对路径或绝对路径；相对路径按当前工作空间根目录解析
 - `demand_file` 是可选原始需求输入，主要给 `/se:propose` 使用；如果配置了，`/se:propose` 必须优先读取它
+- `reference_files` 是 `/se:propose`、`/se:plan`、review 的强上下文；如果配置了，`/se:propose` 必须读取真实存在的参考文件并写入 `propose-input.json`
 - `workspace.yml` 支持 `vars` 变量；路径字段可以使用 `${name}` 或 `${vars.name}` 引用变量，例如 `${demand_name}`
 - `workflow_source=todo` 时，`todo_file` 是用户维护的真实输入
 - `workflow_source=openspec` 时，`todo_file` 是桥接后的执行入口，内容来自 OpenSpec `tasks.md`
@@ -108,6 +124,7 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 工作空间内只保存给 AI 持续推进流程所需的数据：
 
 - `<workspace>/.super-engineer/current-session.json`
+- `<workspace>/.super-engineer/se-state.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/discovery.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/plan.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/self-check.json`
@@ -125,9 +142,21 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 
 每次新的 `plan` 都必须创建新的 `session_id`，不能覆盖历史会话。
 
+OpenSpec 模式下，`se-state.json` 是命令状态机：
+
+- `/se:propose` 后：`phase=proposed`，只允许 `/se:bridge`
+- `/se:bridge` 后：`phase=bridged`，允许 `/se:apply` 或 `/se:plan`
+- `/se:plan` 后：`phase=planned`，只允许 `/se:apply`
+- `/se:verify` 通过后：`phase=verified`，只允许 `/se:archive-check`
+- `/se:archive-check` 通过后：`phase=archive_ready`，只允许 `/se:archive`
+
+状态机由脚本写入和校验，AI 禁止手工编辑。
+
 工作流耗时和通知结果写回当前会话的 `status.json`，通知明细写入：
 
 - `<workspace>/.super-engineer/sessions/<session_id>/notification.json`
+
+`notification.json` 是通知是否成功的唯一证据。聊天记录、截图和 `status.json.notification_status` 都不能单独证明飞书通知合规。
 
 ## 执行模式
 
@@ -169,8 +198,8 @@ OpenSpec 模式可选显式执行：
 
 1. `/se:propose <change-name>`
 2. `/se:bridge`
-3. `/se:approve`
-4. `/se:plan` 或 `/se:apply`
+3. 人工审核 `todo.md`
+4. `/se:apply`
 5. `/se:archive-check`
 6. `/se:archive`
 
@@ -340,7 +369,8 @@ verify 收口时还必须：
 - 支持 PushPlus 原生消息和飞书原生 webhook 两条路由独立启停
 - 普通消息默认走 `wechat`
 - 飞书消息走飞书原生自定义机器人 webhook
-- 不允许 AI 直接调用 webhook 或手工构造飞书卡片；所有飞书通知必须通过脚本统一模板发送
+- 不允许 AI 直接调用 webhook 或手工构造飞书卡片；所有飞书通知必须通过 `python3 scripts/run-workflow.py verify` 调用脚本统一模板发送
+- 飞书通知合规性只以当前 session 的 `notification.json` 为准；启用飞书时必须存在 `route=feishu`、`template=interactive`、`status=sent` 的标准结果
 
 ## 资源导航
 
@@ -356,6 +386,7 @@ verify 收口时还必须：
 - [references/platform-openclaw.md](references/platform-openclaw.md)：面向 OpenClaw 的后续接入约束
 - [scripts/init-workspace.py](scripts/init-workspace.py)：初始化工作空间基础目录
 - [scripts/run-workflow.py](scripts/run-workflow.py)：统一入口
+- `python3 scripts/run-workflow.py validate-state <command>`：校验当前 OpenSpec 状态是否允许执行指定内部命令
 - [scripts/bootstrap-openspec.py](scripts/bootstrap-openspec.py)：OpenSpec `tasks.md` 到桥接 `todo` 的输入适配
 - [scripts/writeback-openspec.py](scripts/writeback-openspec.py)：执行摘要回写到 OpenSpec change
 - [scripts/prepare-archive-openspec.py](scripts/prepare-archive-openspec.py)：生成归档输入与 merge preview

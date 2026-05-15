@@ -28,7 +28,6 @@ AI 收到这些指令后，再根据当前工作空间、当前模式和当前�
 draft
 -> spec_ready
 -> todo_generated
--> todo_approved
 -> implementing
 -> reviewing
 -> verifying
@@ -71,6 +70,7 @@ blocked
 - 为当前需求生成或完善 OpenSpec change
 - 产出或更新 `proposal.md`、`design.md`、`tasks.md`
 - 优先读取 `workspace.yml.demand_file` 作为原始需求输入
+- 读取 `workspace.yml.reference_files` 中真实存在的参考文件作为上下文
 - 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 
 适用模式：
@@ -107,28 +107,6 @@ blocked
 针对当前 OpenSpec change 生成桥接 todo，并总结待审核项。
 ```
 
-### `/se:approve`
-
-作用：
-
-- 表达用户已审核当前桥接 todo
-- 允许工作流进入交付阶段
-
-适用模式：
-
-- `openspec`
-
-前置条件：
-
-- 当前桥接 todo 已经人工审核
-
-典型提示词：
-
-```text
-/se:approve
-我已审核当前桥接 todo，可以进入交付阶段。
-```
-
 ### `/se:plan`
 
 作用：
@@ -145,7 +123,7 @@ blocked
 前置条件：
 
 - `todo` 模式：`todo.md` 已存在
-- `openspec` 模式：推荐在 `/se:approve` 之后执行
+- `openspec` 模式：推荐在 `/se:bridge` 后人工审核 `todo.md`，再执行
 
 典型提示词：
 
@@ -306,7 +284,6 @@ blocked
 
 - `/se:propose <change-name>`
 - `/se:bridge`
-- `/se:approve`
 - `/se:plan` 或 `/se:apply`
 - `/se:archive-check`
 - `/se:archive`
@@ -339,12 +316,8 @@ blocked
 ```
 
 ```text
-/se:approve
-我已审核当前桥接 todo，可以进入交付阶段。
-```
-
-```text
 /se:apply
+我已审核当前桥接 todo，可以进入交付阶段。
 使用当前工作空间。
 当前模式是 openspec + auto。
 如果没有硬阻塞，自动推进到 verify。

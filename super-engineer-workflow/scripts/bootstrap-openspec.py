@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from common import ensure_workflow_inputs, load_workspace_config, todo_path, workflow_source, workspace_root
+from common import ensure_workflow_inputs, load_workspace_config, todo_path, update_se_state, workflow_source, workspace_root
 
 
 def main() -> None:
@@ -17,6 +17,15 @@ def main() -> None:
     if workflow_source(config) != "openspec":
         raise SystemExit("当前 workspace.yml 未启用 OpenSpec 模式，无需执行 bootstrap-openspec。")
     result = ensure_workflow_inputs(config)
+    update_se_state(
+        config,
+        phase="bridged",
+        last_command="/se:bridge",
+        artifacts={
+            "todo": str(todo_path(config)),
+            "bridge_source": str(result.get("bridge_source", "")),
+        },
+    )
     print(f"workflow_source={result.get('workflow_source', '')}")
     print(f"todo={todo_path(config)}")
     print(f"bridge_generated={'true' if result.get('bridge_generated') else 'false'}")

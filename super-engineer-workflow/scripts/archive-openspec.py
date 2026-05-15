@@ -11,6 +11,7 @@ from common import (
     openspec_change_dir,
     openspec_writeback_dir,
     read_json,
+    update_se_state,
     workflow_source,
     workspace_root,
     load_workspace_config,
@@ -93,6 +94,15 @@ def main() -> None:
     }
     write_json(archive_target / "super-engineer" / "archive-result.json", payload)
     write_text(archive_target / "super-engineer" / "archive-result.md", build_markdown(payload))
+    update_se_state(
+        config,
+        phase="archived",
+        last_command="/se:archive",
+        artifacts={
+            "archive_result": str(archive_target / "super-engineer" / "archive-result.json"),
+            "archived_to": str(archive_target),
+        },
+    )
     print(f"archived_to={archive_target}")
 
 

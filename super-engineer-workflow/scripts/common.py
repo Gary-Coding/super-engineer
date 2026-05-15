@@ -540,6 +540,10 @@ def active_openspec_change_path(root: Path | str) -> Path:
     return Path(str(root)).resolve() / ".super-engineer" / "current-openspec-change.json"
 
 
+def se_state_path(config: dict[str, Any]) -> Path:
+    return artifacts_dir(config) / "se-state.json"
+
+
 def sessions_dir(config: dict[str, Any]) -> Path:
     return artifacts_dir(config) / "sessions"
 
@@ -617,6 +621,148 @@ def report_artifact_path(config: dict[str, Any], name: str, session_meta: dict[s
 
 def artifact_path(config: dict[str, Any], name: str) -> Path:
     return data_artifact_path(config, name)
+
+
+SE_PHASE_ALLOWED_NEXT: dict[str, list[str]] = {
+    "draft": ["/se:propose"],
+    "proposed": ["/se:bridge"],
+    "bridged": ["/se:apply", "/se:plan"],
+    "planned": ["/se:apply"],
+    "implementing": [],
+    "self_checked": ["/se:review"],
+    "reviewed": ["/se:verify", "/se:apply"],
+    "verified": ["/se:archive-check"],
+    "archive_ready": ["/se:archive"],
+    "archived": [],
+    "blocked": ["/se:apply", "/se:verify"],
+}
+
+
+RUN_COMMAND_TO_SE_COMMAND: dict[str, str] = {
+    "propose-openspec": "/se:propose",
+    "bootstrap-openspec": "/se:bridge",
+    "plan": "/se:plan",
+    "start-implement": "/se:apply",
+    "finish-implement": "/se:apply",
+    "review": "/se:review",
+    "verify": "/se:verify",
+    "prepare-archive-openspec": "/se:archive-check",
+    "archive-openspec": "/se:archive",
+}
+
+
+def read_se_state(config: dict[str, Any]) -> dict[str, Any]:
+    state = read_json(se_state_path(config), {})
+    if not isinstance(state, dict):
+        state = {}
+    phase = str(state.get("phase", "") or "").strip() or "draft"
+    allowed_next = state.get("allowed_next")
+    if not isinstance(allowed_next, list):
+        allowed_next = SE_PHASE_ALLOWED_NEXT.get(phase, [])
+    state["phase"] = phase
+    state["allowed_next"] = [str(item) for item in allowed_next]
+    return state
+
+
+def write_se_state(config: dict[str, Any], state: dict[str, Any]) -> Path:
+    phase = str(state.get("phase", "") or "draft").strip()
+    state["phase"] = phase
+    state["allowed_next"] = list(SE_PHASE_ALLOWED_NEXT.get(phase, []))
+    state["updated_at"] = now_iso()
+    path = se_state_path(config)
+    write_json(path, state)
+    return path
+
+
+def update_se_state(
+    config: dict[str, Any],
+    phase: str,
+    last_command: str,
+    artifacts: dict[str, Any] | None = None,
+    blocked_reason: str = "",
+) -> dict[str, Any]:
+    state = read_se_state(config)
+    state.update(
+        {
+            "phase": phase,
+            "last_command": last_command,
+            "current_change": openspec_change_name(config) if workflow_source(config) == "openspec" else "",
+            "blocked_reason": blocked_reason,
+        }
+    )
+    if artifacts:
+        existing_artifacts = state.get("artifacts", {})
+        if not isinstance(existing_artifacts, dict):
+            existing_artifacts = {}
+        existing_artifacts.update(artifacts)
+        state["artifacts"] = existing_artifacts
+    write_se_state(config, state)
+    return state
+
+
+def _se_state_artifact_exists(path_text: str) -> bool:
+    return bool(path_text and Path(path_text).exists())
+
+
+def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any]:
+    if workflow_source(config) != "openspec":
+        return {"valid": True, "phase": "", "allowed_next": []}
+    se_command = RUN_COMMAND_TO_SE_COMMAND.get(run_command, "")
+    if not se_command:
+        return {"valid": True, "phase": "", "allowed_next": []}
+    if se_command == "/se:propose":
+        return {"valid": True, "phase": read_se_state(config).get("phase", "draft"), "allowed_next": ["/se:propose"]}
+
+    state = read_se_state(config)
+    phase = str(state.get("phase", "") or "draft").strip()
+    allowed_next = [str(item) for item in state.get("allowed_next", [])]
+    artifacts = state.get("artifacts", {})
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+
+    errors: list[str] = []
+    if se_command == "/se:bridge":
+        if phase != "proposed" or se_command not in allowed_next:
+            errors.append("当前状态不允许执行 /se:bridge，请先执行 /se:propose <change-name>。")
+        for key in ("proposal", "design", "tasks"):
+            if not _se_state_artifact_exists(str(artifacts.get(key, ""))):
+                errors.append(f"缺少 OpenSpec 产物：{key}")
+    elif se_command in ("/se:plan", "/se:apply"):
+        if phase not in ("bridged", "planned", "implementing", "reviewed", "blocked") and se_command not in allowed_next:
+            errors.append("当前状态不允许进入交付，请先完成 /se:bridge 并人工审核 todo.md。")
+        if phase == "proposed":
+            errors.append("/se:propose 后不能直接进入交付，必须先执行 /se:bridge。")
+        if not _se_state_artifact_exists(str(artifacts.get("todo", ""))):
+            errors.append("缺少桥接 todo.md，请先执行 /se:bridge。")
+    elif se_command == "/se:review":
+        if phase not in ("self_checked", "reviewed", "blocked"):
+            errors.append("当前状态不允许 review，请先完成实现和自查。")
+    elif se_command == "/se:verify":
+        if phase not in ("reviewed", "verified", "blocked"):
+            errors.append("当前状态不允许 verify，请先完成 review。")
+    elif se_command == "/se:archive-check":
+        if phase != "verified":
+            errors.append("当前状态不允许 archive-check，请先完成 /se:verify。")
+    elif se_command == "/se:archive":
+        if phase != "archive_ready":
+            errors.append("当前状态不允许 archive，请先完成 /se:archive-check 且结果为 safe_merge。")
+
+    return {
+        "valid": not errors,
+        "phase": phase,
+        "allowed_next": allowed_next,
+        "errors": errors,
+        "state_path": str(se_state_path(config)),
+    }
+
+
+def require_se_state(config: dict[str, Any], run_command: str) -> None:
+    result = validate_se_state(config, run_command)
+    if result.get("valid"):
+        return
+    errors = result.get("errors", [])
+    message = "\n".join(str(item) for item in errors) if errors else "当前工作流状态不允许执行该命令。"
+    raise SystemExit(message)
 
 
 def ensure_runtime_dirs(config: dict[str, Any]) -> None:
@@ -2075,6 +2221,45 @@ def workflow_notification_fingerprint(
     )
 
 
+def notification_has_sent_route(notification: dict[str, Any], route: str, template: str) -> bool:
+    results = notification.get("results", [])
+    if not isinstance(results, list):
+        return False
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("route", "")).strip() != route:
+            continue
+        if str(item.get("template", "")).strip() != template:
+            continue
+        if str(item.get("status", "")).strip() == "sent" and item.get("success", True) is not False:
+            return True
+    return False
+
+
+def is_standard_workflow_notification(
+    config: dict[str, Any],
+    session_meta: dict[str, Any],
+    status: dict[str, Any],
+    overall_result: str,
+    notification: dict[str, Any],
+) -> bool:
+    if not isinstance(notification, dict):
+        return False
+    if str(notification.get("provider", "")).strip() != "notification":
+        return False
+    if str(notification.get("source", "")).strip() != "run-workflow.py verify":
+        return False
+    if str(notification.get("status", "")).strip() not in ("sent", "partial"):
+        return False
+    expected_fingerprint = workflow_notification_fingerprint(session_meta, status, overall_result)
+    if str(notification.get("fingerprint", "")).strip() != expected_fingerprint:
+        return False
+    if feishu_config(config).get("enabled"):
+        return notification_has_sent_route(notification, "feishu", "interactive")
+    return str(notification.get("status", "")).strip() == "sent"
+
+
 def build_workflow_notification(
     config: dict[str, Any],
     session_meta: dict[str, Any],
@@ -2357,8 +2542,7 @@ def notify_workflow_result(
     current_fingerprint = workflow_notification_fingerprint(session_meta, status, overall_result)
     if (
         isinstance(existing_result, dict)
-        and existing_result.get("status") == "sent"
-        and str(existing_result.get("fingerprint", "")).strip() == current_fingerprint
+        and is_standard_workflow_notification(config, session_meta, status, overall_result, existing_result)
     ):
         deduped_result = dict(existing_result)
         deduped_result["deduplicated"] = True
@@ -2372,6 +2556,8 @@ def notify_workflow_result(
         enabled_routes.append({"name": "feishu", "channel": "webhook", "template": "interactive"})
     result: dict[str, Any] = {
         "provider": "notification",
+        "source": "run-workflow.py verify",
+        "schema_version": 1,
         "fingerprint": current_fingerprint,
         "enabled": bool(enabled_routes),
         "status": "skipped",

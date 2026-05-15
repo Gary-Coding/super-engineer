@@ -15,12 +15,15 @@
 5. 读取当前 `.super-engineer/current-session.json` 和当前 session 的 `status.json`，如果存在
 6. 如果是 `openspec` 模式，读取当前 active OpenSpec change 下的 `proposal.md`、`design.md`、`tasks.md`、`specs/` 和 `super-engineer/` 目录
 7. 如果配置了 `demand_file`，读取它作为原始需求输入
-8. 检查当前命令的前置条件
-9. 前置条件不满足时停止，并告诉用户应该先执行哪个 `/se:*` 命令
+8. 如果配置了 `reference_files`，读取真实存在的参考文件作为需求、设计和计划上下文
+9. 检查当前命令的前置条件
+10. 前置条件不满足时停止，并告诉用户应该先执行哪个 `/se:*` 命令
 
 `/se:*` 命令不得要求用户自己运行底层脚本。底层脚本只能由 AI 在 skill 内部调用。
 
 `openspec` 模式下，OpenSpec change 名称必须由 `/se:propose <change-name>` 显式指定。AI 不得根据需求标题、需求文件名或 `vars.demand_name` 自行推导 change 名称。
+
+`workspace.yml` 是用户维护的工作空间契约。AI 只能读取和校验，禁止自动编辑、重写或格式化。如果配置需要调整，AI 必须停止并说明需要用户修改的字段。
 
 ## 状态产物写入硬约束
 
@@ -58,7 +61,7 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 
 除非用户当前消息明确请求该命令，否则 AI 只能提示下一步，不能执行下一步。
 
-`auto` 模式只影响 `/se:apply` 内部从实现到验证的连续推进，不允许让 `/se:propose`、`/se:bridge`、`/se:approve` 自动串到 `/se:apply`。
+`auto` 模式只影响 `/se:apply` 内部从实现到验证的连续推进，不允许让 `/se:propose`、`/se:bridge` 自动串到 `/se:apply`。
 
 `openspec` 模式允许的阶段流转：
 
@@ -66,8 +69,7 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 /se:propose <change-name>
 -> /se:bridge
 -> 人工审核 todo.md
--> /se:approve
--> /se:plan 或 /se:apply
+-> /se:apply
 -> /se:review
 -> /se:verify
 -> /se:archive-check
@@ -77,17 +79,14 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 硬性禁止：
 
 - `/se:propose` 完成后禁止提示 `/se:apply`
-- `/se:propose` 完成后禁止提示 `/se:approve`
-- `/se:bridge` 完成后禁止提示 `/se:apply`
-- `/se:bridge` 完成后必须提示先人工审核 todo，再 `/se:approve`
-- `/se:approve` 之前禁止执行 `/se:plan` 或 `/se:apply`
-- `/se:approve` 完成后必须停止，禁止自动执行 `/se:plan` 或 `/se:apply`
-- `/se:approve` 完成后禁止调用任何会修改代码、生成计划、审查或验证的脚本
-- `/se:apply` 之前必须已存在桥接 todo 和 approval 标记
+- `/se:propose` 完成回复中禁止出现“确认无误后执行 `/se:apply`”“通过 `/se:apply` 进入实现阶段”等跨阶段提示
+- `/se:bridge` 完成后必须提示先人工审核 todo，审核通过后发送 `/se:apply`
+- `/se:apply` 之前必须已完成 `/se:bridge`，并由用户在对话中明确表示 todo 已审核通过或直接在审核后发送 `/se:apply`
 - `/se:apply` 必须通过标准脚本序列推进，禁止手工写 `status.json` 或手工补 output 文档后宣称完成
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未得到 `archive_ready=true` 且 `merge_mode=safe_merge` 前禁止提示 `/se:archive`
-- 工作流完成通知必须通过标准脚本发送，禁止 AI 手工拼接飞书 webhook 消息
+- 工作流完成通知必须通过 `python3 scripts/run-workflow.py verify` 发送，禁止 AI 直接调用飞书 webhook，禁止 AI 手工拼接飞书卡片 JSON
+- 启用飞书时，只有 `notification.json` 中存在 `source=run-workflow.py verify`、fingerprint 匹配、`route=feishu`、`template=interactive`、`status=sent` 的结果，才算飞书通知成功
 
 `todo` 模式允许的阶段流转：
 
@@ -105,21 +104,21 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 | 命令 | 完成后是否必须停止 | 允许的下一步提示 | 禁止自动执行 |
 | --- | --- | --- | --- |
 | `/se:init` | 是 | `/se:propose <change-name>`、`/se:plan` 或 `/se:apply` | 后续所有命令 |
-| `/se:propose <change-name>` | 是 | `/se:bridge` | `/se:approve`、`/se:plan`、`/se:apply`、代码实现 |
-| `/se:bridge` | 是 | 人工审核 todo 后 `/se:approve` | `/se:approve`、`/se:plan`、`/se:apply` |
-| `/se:approve` | 是 | `/se:plan` 或 `/se:apply` | `/se:plan`、`/se:apply`、`start-implement`、代码实现、review、verify |
+| `/se:propose <change-name>` | 是 | `/se:bridge` | `/se:plan`、`/se:apply`、代码实现 |
+| `/se:bridge` | 是 | 人工审核 todo 后 `/se:apply` | 自动执行 `/se:plan`、`/se:apply` |
 | `/se:plan` | 是 | `/se:apply` | 代码实现、review、verify |
 | `/se:archive-check` | 是 | 满足 safe_merge 时 `/se:archive` | `/se:archive` |
 
 ## 状态模型
 
-推荐状态流转：
+OpenSpec 模式使用 `<workspace>/.super-engineer/se-state.json` 作为脚本状态机。AI 只能读取该文件，不能手工编辑。
+
+状态流转：
 
 ```text
 draft
--> spec_ready
--> todo_generated
--> todo_approved
+-> proposed
+-> bridged
 -> planned
 -> implementing
 -> self_checked
@@ -135,31 +134,32 @@ draft
 blocked
 ```
 
-## OpenSpec 审核标记
+实际脚本阶段：
 
-`openspec` 模式下，桥接 todo 是桥接产物，必须被审核后才能进入交付。
+```text
+draft
+-> proposed        allowed_next=[/se:bridge]
+-> bridged         allowed_next=[/se:apply, /se:plan]
+-> planned         allowed_next=[/se:apply]
+-> implementing
+-> self_checked    allowed_next=[/se:review]
+-> reviewed        allowed_next=[/se:verify, /se:apply]
+-> verified        allowed_next=[/se:archive-check]
+-> archive_ready   allowed_next=[/se:archive]
+-> archived
+```
+
+执行 `/se:bridge`、`/se:plan`、`/se:apply`、`/se:verify`、`/se:archive-check`、`/se:archive` 前，脚本必须校验当前 `phase` 和 `allowed_next`。校验失败时停止，不能靠 AI 口头判断继续。
+
+## OpenSpec 桥接审核
+
+`openspec` 模式下，桥接 todo 是桥接产物，必须被人工审核后才能进入交付。
 
 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定。不要假设固定文件名；如果用户没有特殊要求，推荐继续使用 `todo.md`。
 
-当用户执行 `/se:approve` 时，AI 应写入审核标记：
+审核动作不再通过单独命令记录。用户审核 `todo.md` 后，直接发送 `/se:apply` 即表示确认该桥接 todo 可以进入交付。
 
-```text
-<workspace>/.super-engineer/openspec-todo-approval.json
-```
-
-建议结构：
-
-```json
-{
-  "approved": true,
-  "approved_at": "ISO-8601 datetime",
-  "todo_file": "todo.md",
-  "change_dir": "../openspec/changes/<change>",
-  "source": "/se:approve"
-}
-```
-
-`/se:plan` 和 `/se:apply` 在 `workflow_source=openspec` 时必须检查该标记。没有审核标记时，停止并提示先执行 `/se:bridge` 和 `/se:approve`。
+AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`；不能自动进入 `/se:apply`。
 
 ## 命令定义
 
@@ -209,7 +209,9 @@ blocked
 - 执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`
 - 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 - 读取 `propose-input.json`
-- 读取 `demand_file` 或用户输入的需求描述，以及现有 OpenSpec 文件
+- 读取 `demand_file` 或用户输入的需求描述
+- 读取 `reference_files` 中真实存在的参考文件，并作为生成 OpenSpec 产物的上下文
+- 读取现有 OpenSpec 文件
 - 创建或更新 `proposal.md`
 - 创建或更新 `design.md`
 - 创建或更新 `tasks.md`
@@ -220,14 +222,20 @@ blocked
 - change 目录
 - 已生成或更新的文件
 - 任务摘要
-- 下一步只能提示 `/se:bridge`
+- 下一步只能提示：`/se:bridge`
+
+完成后推荐固定收口句：
+
+```text
+代码暂未修改。下一步请执行 /se:bridge，把当前 OpenSpec tasks.md 桥接为待审核 todo.md。
+```
 
 完成后禁止提示：
 
-- `/se:approve`
 - `/se:apply`
 - `/se:plan`
 - 任何代码实现动作
+- “确认无误后通过 /se:apply 进入实现阶段”这类跨过 `/se:bridge` 的表达
 
 如果发现需求有遗漏，应继续停留在 `/se:propose <change-name>` 阶段，补充当前 change，不进入 `/se:bridge`。
 
@@ -264,55 +272,13 @@ blocked
 - 进入本轮交付的任务
 - 关键约束
 - 不清楚或需要人工确认的点
-- 下一步只能提示“人工审核 todo.md，审核通过后执行 `/se:approve`”
+- 下一步只能提示“人工审核 todo.md，审核通过后执行 `/se:apply`”
 
 完成后禁止提示：
 
-- `/se:apply`
 - `/se:plan`
 - `/se:review`
 - `/se:verify`
-
-### `/se:approve`
-
-用途：
-
-- 记录用户已审核桥接 todo
-- 允许 OpenSpec 交付阶段开始
-
-适用模式：
-
-- `openspec`
-
-前置条件：
-
-- 桥接 todo 已存在
-- 用户明确表示已审核通过
-
-内部动作：
-
-- 写入 `<workspace>/.super-engineer/openspec-todo-approval.json`
-- 状态进入 `todo_approved`
-- 不执行 `python3 scripts/run-workflow.py plan`
-- 不执行 `python3 scripts/run-workflow.py start-implement`
-- 不执行任何代码修改、自查、审查或验证
-
-完成后汇报：
-
-- 已审核的 todo 路径
-- 下一步建议 `/se:plan` 或 `/se:apply`
-
-完成后必须立即停止。
-
-完成后禁止：
-
-- 自动执行 `/se:plan`
-- 自动执行 `/se:apply`
-- 自动开始实现
-- 自动执行 review 或 verify
-- 直接提示 `/se:archive-check` 或 `/se:archive`
-
-如果用户没有明确审核通过，不能替用户执行 `/se:approve`。
 
 ### `/se:plan`
 
@@ -329,7 +295,7 @@ blocked
 前置条件：
 
 - `todo` 模式：`todo_file` 存在且不是空模板
-- `openspec` 模式：已完成 `/se:bridge` 和 `/se:approve`
+- `openspec` 模式：已完成 `/se:bridge`，且用户已审核桥接 `todo.md`
 
 内部动作：
 
@@ -361,7 +327,7 @@ blocked
 前置条件：
 
 - `todo` 模式：`todo_file` 存在且不是空模板
-- `openspec` 模式：已完成 `/se:bridge` 和 `/se:approve`
+- `openspec` 模式：已完成 `/se:bridge`，且用户已审核桥接 `todo.md`
 
 内部动作：
 
@@ -374,9 +340,11 @@ blocked
 执行约束：
 
 - `plan`、`start-implement`、`finish-implement`、`review`、`verify` 的状态推进必须由 `python3 scripts/run-workflow.py ...` 完成
+- 每个阶段执行前必须通过 `se-state.json` 状态校验；`/se:propose` 后直接进入 `/se:apply` 必须被脚本拒绝
 - AI 只能在 `start-implement` 和 `finish-implement` 之间修改业务代码
 - AI 不得直接写 `.super-engineer` 下的状态 JSON
 - AI 不得直接写 output 下的标准 Markdown 报告
+- AI 不得直接调用飞书 webhook 或手工拼接飞书通知；通知只能在后续 `python3 scripts/run-workflow.py verify` 中由脚本发送
 - 如果当前 session 不是标准脚本创建的，或者缺少 `plan.json`，必须重新执行 `python3 scripts/run-workflow.py plan` 创建标准 session
 
 `manual` 模式：
@@ -450,12 +418,16 @@ blocked
 内部动作：
 
 - 执行 `python3 scripts/run-workflow.py verify`
+- 由 verify 脚本统一执行通知发送
+- 写入 `verify.json`
+- 写入 `notification.json`
 
 完成后汇报：
 
 - 总体结果
 - 每个仓库的验证结果
 - workflow 是 `done` 还是 `blocked`
+- `notification.json` 中的通知结果；启用飞书时必须汇报飞书 route 是否为 `sent`
 - residual risks
 
 如果验证通过且是 `openspec` 模式，下一步只能提示 `/se:archive-check`。如果验证失败，下一步提示 `/se:apply` 修复或人工处理，不能提示 `/se:archive-check`。
@@ -537,7 +509,7 @@ blocked
 
 - 执行 `python3 scripts/run-workflow.py status`
 - 读取当前 session `status.json`
-- 如果是 `openspec` 模式，同时检查 bridge、approval、execution-summary、archive-input 状态
+- 如果是 `openspec` 模式，同时检查 bridge、execution-summary、archive-input 状态
 
 完成后汇报：
 
@@ -563,14 +535,14 @@ blocked
 
 - 必须先 `/se:propose` 或已有 OpenSpec change
 - 然后 `/se:bridge`
-- 人审后 `/se:approve`
-- 再 `/se:apply`
+- 人工审核 `todo.md`
+- 审核通过后 `/se:apply`
 - verify 通过后做 `/se:archive-check`
 
 `openspec + manual`：
 
 - 前半段同 `openspec + auto`
-- `/se:approve` 后先 `/se:plan`
+- 人工审核 `todo.md` 后先 `/se:plan`
 - 用户确认后 `/se:apply`
 - 再 `/se:review`、`/se:verify`、`/se:archive-check`、`/se:archive`
 

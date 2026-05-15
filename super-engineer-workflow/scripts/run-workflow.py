@@ -16,6 +16,12 @@ from common import (
     planned_codebases,
     planned_codebase,
     read_json,
+    require_se_state,
+    report_artifact_path,
+    se_state_path,
+    todo_path,
+    update_se_state,
+    validate_se_state,
     workflow_source,
     write_json,
     workspace_root,
@@ -69,30 +75,49 @@ def update_status_for_implement(workspace: Path | None, current_task: str, next_
 
 
 def command_status(workspace: Path | None) -> None:
+    config = load_workspace_config(workspace)
     try:
         status, _ = load_status(workspace)
     except FileNotFoundError:
         print("尚未创建当前会话，请先执行 plan。")
-        return
+        status = {}
     if not status:
         print("尚未生成 status.json，请先执行 plan。")
-        return
-    for key in (
-        "session_id",
-        "mode",
-        "phase",
-        "current_task",
-        "progress",
-        "awaiting_confirmation",
-        "pending_confirmation_for",
-        "next_action",
-        "started_at",
-        "finished_at",
-        "duration_seconds",
-        "notification_status",
-        "notification_message",
-        ):
-        print(f"{key}={status.get(key, '')}")
+    else:
+        for key in (
+            "session_id",
+            "mode",
+            "phase",
+            "current_task",
+            "progress",
+            "awaiting_confirmation",
+            "pending_confirmation_for",
+            "next_action",
+            "started_at",
+            "finished_at",
+            "duration_seconds",
+            "notification_status",
+            "notification_message",
+            ):
+            print(f"{key}={status.get(key, '')}")
+    state = read_json(se_state_path(config), {})
+    if state:
+        print(f"se_phase={state.get('phase', '')}")
+        print(f"se_allowed_next={','.join(str(item) for item in state.get('allowed_next', []))}")
+
+
+def command_validate_state(workspace: Path | None, command: str | None) -> None:
+    if not command:
+        raise SystemExit("缺少要校验的命令，例如 validate-state plan。")
+    config = load_workspace_config(workspace)
+    result = validate_se_state(config, command)
+    print(f"valid={str(bool(result.get('valid'))).lower()}")
+    print(f"phase={result.get('phase', '')}")
+    print(f"allowed_next={','.join(str(item) for item in result.get('allowed_next', []))}")
+    for error in result.get("errors", []):
+        print(f"error={error}")
+    if not result.get("valid"):
+        raise SystemExit(1)
 
 
 def command_next(workspace: Path | None, timeout_seconds: int) -> None:
@@ -125,6 +150,7 @@ def command_init(workspace: Path | None) -> None:
 
 
 def command_bootstrap_openspec(workspace: Path | None) -> None:
+    require_se_state(load_workspace_config(workspace), "bootstrap-openspec")
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("bootstrap-openspec.py", args)
 
@@ -142,22 +168,36 @@ def command_writeback_openspec(workspace: Path | None) -> None:
 
 
 def command_prepare_archive_openspec(workspace: Path | None) -> None:
+    require_se_state(load_workspace_config(workspace), "prepare-archive-openspec")
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("prepare-archive-openspec.py", args)
 
 
 def command_archive_openspec(workspace: Path | None) -> None:
+    require_se_state(load_workspace_config(workspace), "archive-openspec")
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("archive-openspec.py", args)
 
 
 def command_plan(workspace: Path | None) -> None:
+    config = load_workspace_config(workspace)
+    require_se_state(config, "plan")
     command_init(workspace)
     config = load_workspace_config(workspace)
     create_session(config)
     command_discover(workspace)
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("generate-smart-plan.py", args)
+    update_se_state(
+        config,
+        phase="planned",
+        last_command="/se:plan",
+        artifacts={
+            "todo": str(todo_path(config)),
+            "plan_json": str(data_artifact_path(config, "plan.json")),
+            "plan_md": str(report_artifact_path(config, "plan.md")),
+        },
+    )
 
 
 def command_discover(workspace: Path | None) -> None:
@@ -167,6 +207,7 @@ def command_discover(workspace: Path | None) -> None:
 
 def command_start_implement(workspace: Path | None) -> None:
     config = load_workspace_config(workspace)
+    require_se_state(config, "start-implement")
     session_meta = current_session_meta(config)
     codebases = planned_codebases(config, session_meta)
     codebase = planned_codebase(config, session_meta)
@@ -181,12 +222,23 @@ def command_start_implement(workspace: Path | None) -> None:
         phase="implement",
         progress=45,
     )
+    update_se_state(config, phase="implementing", last_command="/se:apply")
 
 
 def command_finish_implement(workspace: Path | None) -> None:
     config = load_workspace_config(workspace)
+    require_se_state(config, "finish-implement")
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("generate-self-check.py", args)
+    update_se_state(
+        config,
+        phase="self_checked",
+        last_command="/se:apply",
+        artifacts={
+            "self_check_json": str(data_artifact_path(config, "self-check.json")),
+            "self_check_md": str(report_artifact_path(config, "self-check.md")),
+        },
+    )
     if config["mode"] == "manual":
         update_status_for_implement(
             workspace,
@@ -211,27 +263,53 @@ def command_finish_implement(workspace: Path | None) -> None:
 
 
 def command_review(workspace: Path | None) -> None:
+    config = load_workspace_config(workspace)
+    require_se_state(config, "review")
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("generate-review-report.py", args)
-    if workflow_source(load_workspace_config(workspace)) == "openspec":
+    update_se_state(
+        config,
+        phase="reviewed",
+        last_command="/se:review",
+        artifacts={
+            "review_json": str(data_artifact_path(config, "review.json")),
+            "review_md": str(report_artifact_path(config, "review.md")),
+        },
+    )
+    if workflow_source(config) == "openspec":
         run_python("writeback-openspec.py", args)
 
 
 def command_verify(workspace: Path | None, timeout_seconds: int, force: bool = False) -> None:
+    config = load_workspace_config(workspace)
+    require_se_state(config, "verify")
     args = ["--timeout-seconds", str(timeout_seconds)]
     if force:
         args.append("--force")
     if workspace:
         args.extend(["--workspace", str(workspace)])
     run_python("run-verify-and-report.py", args)
-    if workflow_source(load_workspace_config(workspace)) == "openspec":
+    verify_result = read_json(data_artifact_path(config, "verify.json"), {})
+    result_text = str(verify_result.get("result", "")).strip()
+    update_se_state(
+        config,
+        phase="verified" if result_text == "通过" else "blocked",
+        last_command="/se:verify",
+        artifacts={
+            "verify_json": str(data_artifact_path(config, "verify.json")),
+            "verify_md": str(report_artifact_path(config, "verify.md")),
+            "notification_json": str(data_artifact_path(config, "notification.json")),
+        },
+        blocked_reason="" if result_text == "通过" else result_text or "验证未通过",
+    )
+    if workflow_source(config) == "openspec":
         run_python("writeback-openspec.py", ["--workspace", str(workspace)] if workspace else [])
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="super-engineer 统一工作流入口。")
-    parser.add_argument("command", choices=["init", "propose-openspec", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next"])
-    parser.add_argument("change_name", nargs="?", help="配合 propose-openspec 使用的 OpenSpec change 名称。")
+    parser.add_argument("command", choices=["init", "propose-openspec", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next", "validate-state"])
+    parser.add_argument("change_name", nargs="?", help="配合 propose-openspec 或 validate-state 使用。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--force", action="store_true", help="配合 verify 使用，强制重跑验证并覆盖结果。")
@@ -269,6 +347,8 @@ def main() -> None:
         command_status(workspace)
     elif args.command == "next":
         command_next(workspace, args.timeout_seconds)
+    elif args.command == "validate-state":
+        command_validate_state(workspace, args.change_name)
 
 
 if __name__ == "__main__":
