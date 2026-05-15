@@ -22,6 +22,46 @@
 
 `openspec` 模式下，OpenSpec change 名称必须由 `/se:propose <change-name>` 显式指定。AI 不得根据需求标题、需求文件名或 `vars.demand_name` 自行推导 change 名称。
 
+## 下一步提示硬约束
+
+AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步，不能为了“方便”跳过门禁。
+
+`openspec` 模式允许的阶段流转：
+
+```text
+/se:propose <change-name>
+-> /se:bridge
+-> 人工审核 todo.md
+-> /se:approve
+-> /se:plan 或 /se:apply
+-> /se:review
+-> /se:verify
+-> /se:archive-check
+-> /se:archive
+```
+
+硬性禁止：
+
+- `/se:propose` 完成后禁止提示 `/se:apply`
+- `/se:propose` 完成后禁止提示 `/se:approve`
+- `/se:bridge` 完成后禁止提示 `/se:apply`
+- `/se:bridge` 完成后必须提示先人工审核 todo，再 `/se:approve`
+- `/se:approve` 之前禁止执行 `/se:plan` 或 `/se:apply`
+- `/se:apply` 之前必须已存在桥接 todo 和 approval 标记
+- `/se:verify` 通过前禁止提示 `/se:archive-check`
+- `/se:archive-check` 未得到 `archive_ready=true` 且 `merge_mode=safe_merge` 前禁止提示 `/se:archive`
+
+`todo` 模式允许的阶段流转：
+
+```text
+/se:init
+-> /se:plan 或 /se:apply
+-> /se:review
+-> /se:verify
+```
+
+如果用户要求跳过上述顺序，AI 必须停止并说明缺失的前置条件。
+
 ## 状态模型
 
 推荐状态流转：
@@ -95,7 +135,7 @@ blocked
 
 - workspace 是否可用
 - 缺失配置
-- 下一步建议命令
+- 下一步建议命令：`todo` 模式建议 `/se:plan` 或 `/se:apply`；`openspec` 模式建议 `/se:propose <change-name>` 或 `/se:bridge`，取决于是否已有 active change 和 `tasks.md`
 
 ### `/se:propose`
 
@@ -131,7 +171,16 @@ blocked
 - change 目录
 - 已生成或更新的文件
 - 任务摘要
-- 是否可以进入 `/se:bridge`
+- 下一步只能提示 `/se:bridge`
+
+完成后禁止提示：
+
+- `/se:approve`
+- `/se:apply`
+- `/se:plan`
+- 任何代码实现动作
+
+如果发现需求有遗漏，应继续停留在 `/se:propose <change-name>` 阶段，补充当前 change，不进入 `/se:bridge`。
 
 如果 `workflow_source=todo`，停止并说明 `/se:propose` 只适用于 `openspec` 模式。
 
@@ -166,7 +215,14 @@ blocked
 - 进入本轮交付的任务
 - 关键约束
 - 不清楚或需要人工确认的点
-- 下一步建议 `/se:approve`
+- 下一步只能提示“人工审核 todo.md，审核通过后执行 `/se:approve`”
+
+完成后禁止提示：
+
+- `/se:apply`
+- `/se:plan`
+- `/se:review`
+- `/se:verify`
 
 ### `/se:approve`
 
@@ -193,6 +249,8 @@ blocked
 
 - 已审核的 todo 路径
 - 下一步建议 `/se:plan` 或 `/se:apply`
+
+完成后禁止直接提示 `/se:archive-check` 或 `/se:archive`。
 
 如果用户没有明确审核通过，不能替用户执行 `/se:approve`。
 
@@ -223,7 +281,7 @@ blocked
 - 影响范围
 - 验收标准
 - 风险
-- 下一步建议
+- 下一步建议：`manual` 模式提示用户确认后 `/se:apply`；`auto` 模式如果用户只要求计划，只能停在计划阶段
 
 `manual` 模式下，生成计划后停下。  
 `auto` 模式下，如果用户明确要求“只做计划”，也必须停下。
@@ -273,6 +331,8 @@ blocked
 - residual risks
 - OpenSpec 回写状态
 
+如果 `workflow_source=openspec` 且 verify 通过，下一步只能提示 `/se:archive-check`，不能直接提示 `/se:archive`，除非用户已经明确要求自动归档且归档检查结果满足 `safe_merge`。
+
 ### `/se:review`
 
 用途：
@@ -301,6 +361,8 @@ blocked
 - 测试覆盖风险
 - `openspec` 模式下的 execution-summary 回写状态
 
+如果 review 通过，下一步提示 `/se:verify`。如果存在 blocking finding，下一步提示 `/se:apply` 修复 blocking finding，不能提示 `/se:verify`。
+
 ### `/se:verify`
 
 用途：
@@ -327,6 +389,8 @@ blocked
 - 每个仓库的验证结果
 - workflow 是 `done` 还是 `blocked`
 - residual risks
+
+如果验证通过且是 `openspec` 模式，下一步只能提示 `/se:archive-check`。如果验证失败，下一步提示 `/se:apply` 修复或人工处理，不能提示 `/se:archive-check`。
 
 ### `/se:archive-check`
 
@@ -356,6 +420,8 @@ blocked
 - `blockers`
 - `spec_conflicts`
 - 是否允许继续 `/se:archive`
+
+只有 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时，下一步才允许提示 `/se:archive`。否则只能提示人工处理 blockers 或 spec 冲突。
 
 如果 `merge_mode=manual_merge_required`，停止并说明需要人工处理的 spec 冲突。
 

@@ -46,6 +46,11 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 - 当前置条件不满足时，停止该命令并明确说明缺少什么、应该先执行哪个 `/se:*` 命令
 - `/se:propose` 必须显式携带 OpenSpec change 名称，例如 `/se:propose demand-addition-rate`；AI 不得根据需求标题或 `demand_name` 自行推导 change 名称
 - `/se:propose <change-name>` 应先执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json` 和 `demand_file` 生成或完善 OpenSpec artifacts
+- `/se:propose` 完成后只能提示下一步 `/se:bridge`，禁止提示 `/se:apply`
+- `/se:bridge` 完成后只能提示人工审核 todo，再 `/se:approve`，禁止提示 `/se:apply`
+- `/se:approve` 之前禁止执行或建议 `/se:plan`、`/se:apply`
+- `/se:verify` 通过前禁止提示 `/se:archive-check`
+- `/se:archive-check` 未满足 `safe_merge` 前禁止提示 `/se:archive`
 
 ## 先读取这些输入
 
