@@ -38,6 +38,9 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 
 - 不要把 `/se:*` 映射为 OpenSpec 官方 `/opsx:*`
 - 不要要求用户自己执行底层脚本
+- 禁止 AI 直接创建、修改或伪造 `.super-engineer/current-session.json`、`.super-engineer/sessions/**/status.json`、`plan.json`、`review.json`、`verify.json`、`notification.json` 等工作流状态产物；这些文件只能由本 skill 脚本写入
+- 禁止 AI 直接在 `output_dir/<session_id>/` 下手工补写 `discovery.md`、`plan.md`、`self-check.md`、`review.md`、`verify.md` 等标准报告；这些标准报告只能由对应脚本生成
+- 如果发现当前 session 缺少标准 JSON 或 Markdown 产物，不得手工补文件；必须通过 `/se:plan`、`/se:review`、`/se:verify` 或重新创建标准 session 来恢复
 - 每次只能执行用户当前消息中明确请求的 `/se:*` 命令；“下一步建议”只能作为文字建议，绝不能自动执行下一步命令
 - `openspec` 模式下，`/se:bridge` 生成的桥接 todo 必须先经过 `/se:approve` 才能进入交付阶段
 - 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，不要假设固定文件名；如果用户没有特殊要求，推荐使用 `todo.md`
@@ -52,6 +55,7 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 - `/se:bridge` 完成后只能提示人工审核 todo，再 `/se:approve`，禁止提示 `/se:apply`
 - `/se:approve` 之前禁止执行或建议 `/se:plan`、`/se:apply`
 - `/se:approve` 完成后必须立即停止；禁止自动调用 plan、apply、start-implement、review、verify 或修改代码
+- `/se:apply` 必须通过标准脚本序列推进：必要时先 `python3 scripts/run-workflow.py plan`，然后 `start-implement`，代码实现完成后 `finish-implement`，`auto` 模式下继续 `review` 和 `verify`；禁止只手工写状态或只手工发送通知后宣布完成
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未满足 `safe_merge` 前禁止提示 `/se:archive`
 - 工作流完成通知必须由 `python3 scripts/run-workflow.py verify` 触发，禁止 AI 手工拼接飞书 webhook 消息
@@ -132,7 +136,7 @@ description: Use this skill whenever the user sends a `/se:*` workflow command s
 - `manual`：在计划、实现、审查三个检查点等待用户确认
 - `auto`：除非阻塞，否则沿工作流自动推进
 
-始终保持 `status.json` 为当前会话的真实状态。
+始终保持 `status.json` 为当前会话的真实状态。`status.json` 是脚本管理文件，AI 不能直接编辑它，只能通过 `scripts/run-workflow.py` 或被该入口调用的脚本更新。
 
 `auto` 模式下的执行纪律：
 
@@ -180,7 +184,7 @@ OpenSpec 模式可选显式执行：
 
 ## 必走工作流
 
-优先使用统一入口 [`scripts/run-workflow.py`](scripts/run-workflow.py)，不要在对话里手工拼工作流状态。
+必须使用统一入口 [`scripts/run-workflow.py`](scripts/run-workflow.py) 推进工作流状态，不要在对话里手工拼工作流状态。
 
 ### 1. 初始化上下文
 

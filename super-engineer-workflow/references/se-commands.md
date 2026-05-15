@@ -22,6 +22,31 @@
 
 `openspec` 模式下，OpenSpec change 名称必须由 `/se:propose <change-name>` 显式指定。AI 不得根据需求标题、需求文件名或 `vars.demand_name` 自行推导 change 名称。
 
+## 状态产物写入硬约束
+
+AI 禁止直接创建、修改或伪造以下标准工作流产物：
+
+- `<workspace>/.super-engineer/current-session.json`
+- `<workspace>/.super-engineer/sessions/<session_id>/status.json`
+- `<workspace>/.super-engineer/sessions/<session_id>/plan.json`
+- `<workspace>/.super-engineer/sessions/<session_id>/review.json`
+- `<workspace>/.super-engineer/sessions/<session_id>/verify.json`
+- `<workspace>/.super-engineer/sessions/<session_id>/notification.json`
+- `<output_dir>/<session_id>/discovery.md`
+- `<output_dir>/<session_id>/plan.md`
+- `<output_dir>/<session_id>/self-check.md`
+- `<output_dir>/<session_id>/review.md`
+- `<output_dir>/<session_id>/verify.md`
+
+这些文件只能由本 skill 的标准脚本生成或更新。AI 可以修改业务代码、OpenSpec 规格、todo 文件和用户明确要求编辑的普通文档，但不能手工补写工作流状态产物。
+
+如果发现 session 已经被手工污染，例如只有 `status.json`，没有 `plan.json`、`review.json`、`verify.json`、`notification.json` 或 output Markdown，AI 必须停止手工补文件，改为：
+
+1. 重新执行 `/se:plan` 创建标准 session；或
+2. 在已有标准 session 上执行 `/se:review`、`/se:verify` 恢复后续标准产物。
+
+禁止通过手工写 `notification_status=sent`、手工写 `phase=done`、手工拼飞书卡片来宣称工作流完成。
+
 ## 下一步提示硬约束
 
 AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步，不能为了“方便”跳过门禁。
@@ -59,6 +84,7 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 - `/se:approve` 完成后必须停止，禁止自动执行 `/se:plan` 或 `/se:apply`
 - `/se:approve` 完成后禁止调用任何会修改代码、生成计划、审查或验证的脚本
 - `/se:apply` 之前必须已存在桥接 todo 和 approval 标记
+- `/se:apply` 必须通过标准脚本序列推进，禁止手工写 `status.json` 或手工补 output 文档后宣称完成
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
 - `/se:archive-check` 未得到 `archive_ready=true` 且 `merge_mode=safe_merge` 前禁止提示 `/se:archive`
 - 工作流完成通知必须通过标准脚本发送，禁止 AI 手工拼接飞书 webhook 消息
@@ -344,6 +370,14 @@ blocked
 - 按当前 `plan.json` 实现代码
 - 执行 `python3 scripts/run-workflow.py finish-implement`
 - 根据 `mode` 判断是否继续
+
+执行约束：
+
+- `plan`、`start-implement`、`finish-implement`、`review`、`verify` 的状态推进必须由 `python3 scripts/run-workflow.py ...` 完成
+- AI 只能在 `start-implement` 和 `finish-implement` 之间修改业务代码
+- AI 不得直接写 `.super-engineer` 下的状态 JSON
+- AI 不得直接写 output 下的标准 Markdown 报告
+- 如果当前 session 不是标准脚本创建的，或者缺少 `plan.json`，必须重新执行 `python3 scripts/run-workflow.py plan` 创建标准 session
 
 `manual` 模式：
 

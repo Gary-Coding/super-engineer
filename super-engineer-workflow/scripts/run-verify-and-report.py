@@ -20,6 +20,7 @@ from common import (
     planned_codebases,
     read_json,
     report_artifact_path,
+    workflow_notification_fingerprint,
     workflow_duration_seconds,
     write_json,
     write_text,
@@ -27,6 +28,26 @@ from common import (
 )
 
 VERIFY_BLOCKERS = {"未识别到验证命令", "验证失败", "验证执行超时"}
+
+
+def has_sent_standard_notification(
+    config: dict,
+    session_meta: dict,
+    status: dict,
+) -> bool:
+    verify_path = data_artifact_path(config, "verify.json", session_meta)
+    notification_path = data_artifact_path(config, "notification.json", session_meta)
+    verify = read_json(verify_path, {})
+    notification = read_json(notification_path, {})
+    if not isinstance(verify, dict) or not isinstance(notification, dict):
+        return False
+    if str(notification.get("status", "")).strip() != "sent":
+        return False
+    overall_result = str(verify.get("result", "")).strip()
+    if not overall_result:
+        return False
+    expected_fingerprint = workflow_notification_fingerprint(session_meta, status, overall_result)
+    return str(notification.get("fingerprint", "")).strip() == expected_fingerprint
 
 
 def tail(text: str, lines: int = 20) -> list[str]:
@@ -218,6 +239,7 @@ def main() -> None:
         not args.force
         and str(existing_status.get("phase", "")).strip() == "done"
         and str(existing_status.get("notification_status", "")).strip() == "sent"
+        and has_sent_standard_notification(config, session_meta, existing_status)
     ):
         print("当前会话已完成且通知已发送，跳过重复验证。需要重跑请显式传入 --force。")
         return
