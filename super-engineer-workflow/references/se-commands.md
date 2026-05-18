@@ -354,11 +354,15 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 
 - `plan`、`start-implement`、`finish-implement`、`review`、`verify` 的状态推进必须由 `python3 scripts/run-workflow.py ...` 完成
 - 每个阶段执行前必须通过 `se-state.json` 状态校验；`/se:propose` 后直接进入 `/se:apply` 必须被脚本拒绝
+- `todo` 模式下也必须通过当前 session 的 `status.json`、`todo-state.json` 和标准产物来源校验，不能复用旧需求 session
+- `todo` 模式的状态不能写入 OpenSpec 专用 `se-state.json`
+- `todo` 模式下如果 `current-session.json` 指向旧 `output_dir`，`/se:apply` 必须重新创建标准 session
 - AI 只能在 `start-implement` 和 `finish-implement` 之间修改业务代码
 - AI 不得直接写 `.super-engineer` 下的状态 JSON
 - AI 不得直接写 output 下的标准 Markdown 报告
 - AI 不得直接调用飞书 webhook 或手工拼接飞书通知；通知只能在后续 `python3 scripts/run-workflow.py verify` 中由脚本发送
 - 如果当前 session 不是标准脚本创建的，或者缺少 `plan.json`，必须重新执行 `python3 scripts/run-workflow.py plan` 创建标准 session
+- 如果当前 session 的 `plan.json`、`self-check.json`、`review.json`、`verify.json` 缺少对应 `source=run-workflow.py ...`，必须视为非标准产物并停止
 
 `manual` 模式：
 

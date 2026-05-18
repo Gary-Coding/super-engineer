@@ -563,6 +563,14 @@ def se_state_path(config: dict[str, Any]) -> Path:
     return artifacts_dir(config) / "se-state.json"
 
 
+def todo_state_path(config: dict[str, Any]) -> Path:
+    return artifacts_dir(config) / "todo-state.json"
+
+
+def workflow_state_path(config: dict[str, Any]) -> Path:
+    return todo_state_path(config) if workflow_source(config) == "todo" else se_state_path(config)
+
+
 def sessions_dir(config: dict[str, Any]) -> Path:
     return artifacts_dir(config) / "sessions"
 
@@ -665,6 +673,16 @@ SE_PHASE_ALLOWED_NEXT: dict[str, list[str]] = {
     "blocked": ["/se:apply", "/se:verify"],
 }
 
+TODO_PHASE_ALLOWED_NEXT: dict[str, list[str]] = {
+    "draft": ["/se:init", "/se:plan", "/se:apply"],
+    "planned": ["/se:apply"],
+    "implementing": [],
+    "self_checked": ["/se:review"],
+    "reviewed": ["/se:verify", "/se:apply"],
+    "done": [],
+    "blocked": ["/se:apply", "/se:verify"],
+}
+
 
 RUN_COMMAND_TO_SE_COMMAND: dict[str, str] = {
     "route-se": "",
@@ -696,13 +714,14 @@ SE_COMMAND_TO_RUN_COMMAND: dict[str, str] = {
 
 
 def read_se_state(config: dict[str, Any]) -> dict[str, Any]:
-    state = read_json(se_state_path(config), {})
+    state = read_json(workflow_state_path(config), {})
     if not isinstance(state, dict):
         state = {}
     phase = str(state.get("phase", "") or "").strip() or "draft"
     allowed_next = state.get("allowed_next")
     if not isinstance(allowed_next, list):
-        allowed_next = SE_PHASE_ALLOWED_NEXT.get(phase, [])
+        allowed_map = TODO_PHASE_ALLOWED_NEXT if workflow_source(config) == "todo" else SE_PHASE_ALLOWED_NEXT
+        allowed_next = allowed_map.get(phase, [])
     state["phase"] = phase
     state["allowed_next"] = [str(item) for item in allowed_next]
     return state
@@ -711,9 +730,10 @@ def read_se_state(config: dict[str, Any]) -> dict[str, Any]:
 def write_se_state(config: dict[str, Any], state: dict[str, Any]) -> Path:
     phase = str(state.get("phase", "") or "draft").strip()
     state["phase"] = phase
-    state["allowed_next"] = list(SE_PHASE_ALLOWED_NEXT.get(phase, []))
+    allowed_map = TODO_PHASE_ALLOWED_NEXT if workflow_source(config) == "todo" else SE_PHASE_ALLOWED_NEXT
+    state["allowed_next"] = list(allowed_map.get(phase, []))
     state["updated_at"] = now_iso()
-    path = se_state_path(config)
+    path = workflow_state_path(config)
     write_managed_json(config, path, state)
     return path
 
@@ -746,6 +766,122 @@ def update_se_state(
 
 def _se_state_artifact_exists(path_text: str) -> bool:
     return bool(path_text and Path(path_text).exists())
+
+
+def current_session_is_stale(config: dict[str, Any]) -> bool:
+    raw = read_json(current_session_file(config), {})
+    if not isinstance(raw, dict) or not raw.get("session_id"):
+        return False
+    session_id = str(raw.get("session_id", "")).strip()
+    expected_report_dir = session_report_dir(config, session_id).resolve()
+    raw_report_dir = str(raw.get("report_dir", "")).strip()
+    if raw_report_dir and Path(raw_report_dir).expanduser().resolve() != expected_report_dir:
+        return True
+    raw_workspace = str(raw.get("workspace", "")).strip()
+    if raw_workspace and Path(raw_workspace).expanduser().resolve() != Path(str(config["__workspace_root"])).resolve():
+        return True
+    return False
+
+
+def _safe_current_session_meta(config: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        return current_session_meta(config)
+    except FileNotFoundError:
+        return None
+
+
+def _status_phase_for_todo(config: dict[str, Any]) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
+    if current_session_is_stale(config):
+        return "draft", {}, None
+    session_meta = _safe_current_session_meta(config)
+    if not session_meta:
+        return "draft", {}, None
+    status_path = data_artifact_path(config, "status.json", session_meta)
+    status = read_json(status_path, {})
+    if not isinstance(status, dict) or not status:
+        if data_artifact_path(config, "plan.json", session_meta).exists():
+            return "planned", {}, session_meta
+        return "draft", {}, session_meta
+    status_phase = str(status.get("phase", "") or "").strip()
+    phase_map = {
+        "context": "draft",
+        "plan": "planned",
+        "wait_confirm_plan": "planned",
+        "implement": "implementing",
+        "self_check": "self_checked",
+        "wait_confirm_implement": "self_checked",
+        "review": "reviewed",
+        "wait_confirm_review": "reviewed",
+        "done": "done",
+        "blocked": "blocked",
+    }
+    return phase_map.get(status_phase, status_phase or "draft"), status, session_meta
+
+
+def _standard_source(payload: dict[str, Any], expected: str) -> bool:
+    return str(payload.get("source", "")).strip() == expected
+
+
+def validate_standard_session(config: dict[str, Any], require_notification: bool = False) -> dict[str, Any]:
+    errors: list[str] = []
+    if current_session_is_stale(config):
+        errors.append("current-session.json 指向旧 output_dir，请重新执行 /se:plan 创建当前需求的标准会话。")
+        return {"valid": False, "errors": errors}
+    session_meta = _safe_current_session_meta(config)
+    if not session_meta:
+        errors.append("缺少当前 session，请先执行 /se:plan。")
+        return {"valid": False, "errors": errors}
+
+    status_path = data_artifact_path(config, "status.json", session_meta)
+    status = read_json(status_path, {})
+    if not isinstance(status, dict) or not status:
+        errors.append("缺少标准 status.json。")
+        status = {}
+
+    plan = read_json(data_artifact_path(config, "plan.json", session_meta), {})
+    if not isinstance(plan, dict) or not plan:
+        errors.append("缺少标准 plan.json。")
+    elif not _standard_source(plan, "run-workflow.py plan"):
+        errors.append("plan.json 不是标准脚本生成的产物。")
+
+    optional_sources = {
+        "self-check.json": "run-workflow.py self-check",
+        "review.json": "run-workflow.py review",
+        "verify.json": "run-workflow.py verify",
+    }
+    for artifact_name, source in optional_sources.items():
+        path = data_artifact_path(config, artifact_name, session_meta)
+        if not path.exists():
+            continue
+        payload = read_json(path, {})
+        if not isinstance(payload, dict) or not _standard_source(payload, source):
+            errors.append(f"{artifact_name} 不是标准脚本生成的产物。")
+
+    if require_notification or str(status.get("phase", "")).strip() == "done":
+        verify = read_json(data_artifact_path(config, "verify.json", session_meta), {})
+        notification = read_json(data_artifact_path(config, "notification.json", session_meta), {})
+        overall_result = str(verify.get("result", "")).strip() if isinstance(verify, dict) else ""
+        if overall_result != "通过":
+            errors.append("缺少通过状态的标准 verify.json。")
+        else:
+            pushplus_enabled = any(item.get("enabled") for item in pushplus_config(config).get("routes", []))
+            notification_enabled = bool(feishu_config(config).get("enabled") or pushplus_enabled)
+            if notification_enabled:
+                if not is_standard_workflow_notification(config, session_meta, ensure_status(config, session_meta, status), overall_result, notification):
+                    errors.append("缺少标准 notification.json，或通知不是由 run-workflow.py verify 成功发送。")
+            elif not (
+                isinstance(notification, dict)
+                and str(notification.get("provider", "")).strip() == "notification"
+                and str(notification.get("source", "")).strip() == "run-workflow.py verify"
+                and str(notification.get("status", "")).strip() == "skipped"
+            ):
+                errors.append("缺少标准 notification.json，或未按未配置通知场景标记 skipped。")
+
+    return {
+        "valid": not errors,
+        "errors": errors,
+        "session_id": session_meta["session_id"] if session_meta else "",
+    }
 
 
 def recover_se_state_from_artifacts(config: dict[str, Any]) -> dict[str, Any]:
@@ -842,7 +978,39 @@ def recover_se_state_from_artifacts(config: dict[str, Any]) -> dict[str, Any]:
 
 def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any]:
     if workflow_source(config) != "openspec":
-        return {"valid": True, "phase": "", "allowed_next": []}
+        se_command = RUN_COMMAND_TO_SE_COMMAND.get(run_command, "")
+        phase, status, session_meta = _status_phase_for_todo(config)
+        allowed_next = TODO_PHASE_ALLOWED_NEXT.get(phase, [])
+        errors: list[str] = []
+        if run_command in ("propose-openspec", "bootstrap-openspec", "prepare-archive-openspec", "archive-openspec"):
+            errors.append("当前是 todo 模式，不能执行 OpenSpec 专属命令。")
+        elif run_command in ("plan", "apply"):
+            if not todo_path(config).exists():
+                errors.append("缺少 todo_file，请先执行 /se:init 或补充 todo.md。")
+        elif run_command == "start-implement":
+            if phase not in ("planned", "implementing", "blocked"):
+                errors.append("当前状态不允许进入实现，请先执行 /se:plan。")
+        elif run_command == "finish-implement":
+            if phase != "implementing":
+                errors.append("当前状态不允许完成实现，必须先通过 /se:apply 进入 implementing。")
+        elif run_command == "review":
+            if phase not in ("self_checked", "reviewed", "blocked"):
+                errors.append("当前状态不允许 review，请先完成实现和自查。")
+        elif run_command == "verify":
+            if phase not in ("reviewed", "done", "blocked"):
+                errors.append("当前状态不允许 verify，请先完成 review。")
+        if session_meta and run_command in ("start-implement", "finish-implement", "review", "verify"):
+            standard = validate_standard_session(config, require_notification=False)
+            for item in standard.get("errors", []):
+                if "notification.json" not in str(item):
+                    errors.append(str(item))
+        return {
+            "valid": not errors,
+            "phase": phase,
+            "allowed_next": allowed_next,
+            "errors": errors,
+            "status_phase": status.get("phase", "") if isinstance(status, dict) else "",
+        }
     se_command = RUN_COMMAND_TO_SE_COMMAND.get(run_command, "")
     if not se_command:
         return {"valid": True, "phase": "", "allowed_next": []}

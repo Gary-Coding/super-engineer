@@ -15,6 +15,7 @@ from common import (
     format_duration,
     load_workspace_config,
     is_standard_workflow_notification,
+    feishu_config,
     notify_workflow_result,
     now_iso,
     phase_after,
@@ -217,6 +218,23 @@ def finalize_status(
     notification_result = notify_workflow_result(config, session_meta, plan, status, overall_result)
     status["notification_status"] = str(notification_result.get("status", "skipped"))
     status["notification_message"] = str(notification_result.get("message", ""))
+    if (
+        overall_result == "通过"
+        and feishu_config(config).get("enabled")
+        and not is_standard_workflow_notification(config, session_meta, status, overall_result, notification_result)
+    ):
+        status.update(
+            {
+                "phase": "blocked",
+                "current_task": "验证通过但飞书通知发送失败。",
+                "progress": 95,
+                "awaiting_confirmation": False,
+                "pending_confirmation_for": "",
+                "next_action": "请修复飞书通知配置或网络后重新执行 /se:verify。",
+                "blocked_tasks": list(dict.fromkeys(status.get("blocked_tasks", []) + ["飞书通知发送失败"])),
+                "updated_at": now_iso(),
+            }
+        )
     write_managed_json(config, status_path, status)
 
 
@@ -325,6 +343,8 @@ def main() -> None:
             data_artifact_path(config, "verify.json", session_meta),
             {
                 "session_id": session_meta["session_id"],
+                "source": "run-workflow.py verify",
+                "schema_version": 1,
                 "result": overall_result,
                 "sections": sections,
                 "duration_seconds": duration,
@@ -363,6 +383,8 @@ def main() -> None:
             data_artifact_path(config, "verify.json", session_meta),
             {
                 "session_id": session_meta["session_id"],
+                "source": "run-workflow.py verify",
+                "schema_version": 1,
                 "result": "超时",
                 "sections": sections,
                 "duration_seconds": duration,

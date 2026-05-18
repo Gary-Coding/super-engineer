@@ -154,6 +154,8 @@ def main() -> None:
     self_check = build_self_check(plan, sections)
     payload = {
         "session_id": session_meta["session_id"],
+        "source": "run-workflow.py self-check",
+        "schema_version": 1,
         "result": self_check["result"],
         "sections": sections,
         "findings": self_check["findings"],

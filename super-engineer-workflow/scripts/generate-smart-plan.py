@@ -363,6 +363,8 @@ def main() -> None:
 
     plan = {
         "session_id": session_meta["session_id"],
+        "source": "run-workflow.py plan",
+        "schema_version": 1,
         "constraints": constraints,
         "todo_progress": progress,
         "task_modules": task_modules,

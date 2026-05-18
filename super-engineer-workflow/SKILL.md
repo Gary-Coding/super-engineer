@@ -131,6 +131,7 @@ description: Mandatory for any user message that starts with `/se:` or asks to r
 
 - `<workspace>/.super-engineer/current-session.json`
 - `<workspace>/.super-engineer/se-state.json`
+- `<workspace>/.super-engineer/todo-state.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/discovery.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/plan.json`
 - `<workspace>/.super-engineer/sessions/<session_id>/self-check.json`
@@ -158,11 +159,33 @@ OpenSpec 模式下，`se-state.json` 是命令状态机：
 
 状态机由脚本写入和校验，AI 禁止手工编辑。
 
+todo 模式下，也必须以当前 session 的 `status.json`、`todo-state.json` 和标准产物校验作为状态依据；todo 状态不能写入 OpenSpec 专用的 `se-state.json`：
+
+- 未创建 session：允许 `/se:init`、`/se:plan`、`/se:apply`
+- `plan` / `wait_confirm_plan`：允许 `/se:apply`
+- `implement`：只允许 AI 修改代码，完成后必须由脚本执行 `finish-implement`
+- `self_check` / `wait_confirm_implement`：允许 `/se:review`
+- `review` / `wait_confirm_review`：允许 `/se:verify`
+- `done`：不再自动推进
+- `blocked`：允许修复后重新 `/se:apply` 或 `/se:verify`
+
+todo 模式下如果 `current-session.json` 指向旧 `output_dir`，或当前 session 缺少标准 `status.json` / `plan.json`，必须重新创建标准 session；禁止复用旧需求的会话状态。
+
 工作流耗时和通知结果写回当前会话的 `status.json`，通知明细写入：
 
 - `<workspace>/.super-engineer/sessions/<session_id>/notification.json`
 
 `notification.json` 是通知是否成功的唯一证据。聊天记录、截图和 `status.json.notification_status` 都不能单独证明飞书通知合规。
+
+标准 JSON 产物必须带有脚本来源标识：
+
+- `plan.json`：`source=run-workflow.py plan`
+- `self-check.json`：`source=run-workflow.py self-check`
+- `review.json`：`source=run-workflow.py review`
+- `verify.json`：`source=run-workflow.py verify`
+- `notification.json`：`source=run-workflow.py verify`
+
+缺少上述来源标识的产物视为非标准产物，不能作为工作流完成依据。
 
 ## 执行模式
 

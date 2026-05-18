@@ -252,6 +252,8 @@ def main() -> None:
         data_artifact_path(config, "review.json", session_meta),
         {
             "session_id": session_meta["session_id"],
+            "source": "run-workflow.py review",
+            "schema_version": 1,
             "result": review_result,
             "sections": sections,
             "findings": findings,
