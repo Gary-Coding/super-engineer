@@ -22,8 +22,8 @@ from common import (
     read_json,
     report_artifact_path,
     workflow_duration_seconds,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
     workspace_root,
 )
 
@@ -87,6 +87,7 @@ def summarize_stdout(stdout_text: str) -> list[str]:
 
 
 def write_report(
+    config: dict,
     output: Path,
     sections: list[dict],
     checks: list[str],
@@ -147,7 +148,7 @@ def write_report(
     else:
         lines.append("- 请根据失败输出修复问题后重新执行验证。")
     lines.append("")
-    write_text(output, "\n".join(lines))
+    write_managed_text(config, output, "\n".join(lines))
 
 
 def merge_result(current: str, new: str) -> str:
@@ -216,7 +217,7 @@ def finalize_status(
     notification_result = notify_workflow_result(config, session_meta, plan, status, overall_result)
     status["notification_status"] = str(notification_result.get("status", "skipped"))
     status["notification_message"] = str(notification_result.get("message", ""))
-    write_json(status_path, status)
+    write_managed_json(config, status_path, status)
 
 
 def main() -> None:
@@ -311,6 +312,7 @@ def main() -> None:
         status_for_duration = ensure_status(config, session_meta, read_json(status_path, {}))
         workflow_duration = workflow_duration_seconds(session_meta, status_for_duration, now_iso())
         write_report(
+            config,
             report_artifact_path(config, "verify.md", session_meta),
             sections,
             plan.get("test_plan", []),
@@ -318,7 +320,8 @@ def main() -> None:
             duration,
             workflow_duration,
         )
-        write_json(
+        write_managed_json(
+            config,
             data_artifact_path(config, "verify.json", session_meta),
             {
                 "session_id": session_meta["session_id"],
@@ -347,6 +350,7 @@ def main() -> None:
         status_for_duration = ensure_status(config, session_meta, read_json(status_path, {}))
         workflow_duration = workflow_duration_seconds(session_meta, status_for_duration, now_iso())
         write_report(
+            config,
             report_artifact_path(config, "verify.md", session_meta),
             sections,
             plan.get("test_plan", []),
@@ -354,7 +358,8 @@ def main() -> None:
             duration,
             workflow_duration,
         )
-        write_json(
+        write_managed_json(
+            config,
             data_artifact_path(config, "verify.json", session_meta),
             {
                 "session_id": session_meta["session_id"],

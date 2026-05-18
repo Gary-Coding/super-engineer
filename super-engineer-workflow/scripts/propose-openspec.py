@@ -20,8 +20,8 @@ from common import (
     workflow_source,
     workspace_root,
     write_active_openspec_change,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -91,9 +91,14 @@ def main() -> None:
         "openspec_cli_available": openspec_cli_available(),
         "commands": commands,
         "next_action": "Use demand_text, reference_files, and OpenSpec instructions to create or update proposal.md, design.md, tasks.md, and specs/.",
+        "workflow_phase_after_completion": "proposed",
+        "allowed_next_after_completion": ["/se:bridge"],
+        "forbidden_next_after_completion": ["/se:plan", "/se:apply"],
+        "final_reply_constraint": "代码暂未修改。下一步只能执行 /se:bridge，把当前 OpenSpec tasks.md 桥接为待审核 todo.md。",
     }
-    write_json(writeback_dir / "propose-input.json", payload)
-    write_text(
+    write_managed_json(config, writeback_dir / "propose-input.json", payload)
+    write_managed_text(
+        config,
         writeback_dir / "propose-input.md",
         "\n".join(
             [
@@ -146,6 +151,10 @@ def main() -> None:
     print(f"reference_files={len(reference_contexts)}")
     print(f"openspec_cli_available={str(openspec_cli_available()).lower()}")
     print(f"propose_input={writeback_dir / 'propose-input.json'}")
+    print("workflow_phase_after_completion=proposed")
+    print("allowed_next_after_completion=/se:bridge")
+    print("forbidden_next_after_completion=/se:plan,/se:apply")
+    print("final_reply_must=代码暂未修改。下一步只能执行 /se:bridge，把当前 OpenSpec tasks.md 桥接为待审核 todo.md。")
 
 
 if __name__ == "__main__":

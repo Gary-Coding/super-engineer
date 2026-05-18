@@ -15,8 +15,8 @@ from common import (
     read_json,
     report_artifact_path,
     workspace_root,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -159,8 +159,8 @@ def main() -> None:
         "findings": self_check["findings"],
         "created_at": now_iso(),
     }
-    write_json(data_artifact_path(config, "self-check.json", session_meta), payload)
-    write_text(report_artifact_path(config, "self-check.md", session_meta), build_markdown(self_check, sections))
+    write_managed_json(config, data_artifact_path(config, "self-check.json", session_meta), payload)
+    write_managed_text(config, report_artifact_path(config, "self-check.md", session_meta), build_markdown(self_check, sections))
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
     status.update(
@@ -174,7 +174,7 @@ def main() -> None:
             "updated_at": now_iso(),
         }
     )
-    write_json(data_artifact_path(config, "status.json", session_meta), status)
+    write_managed_json(config, data_artifact_path(config, "status.json", session_meta), status)
     if self_check["result"] == "blocked":
         raise SystemExit("实现自查发现阻塞项，请查看 self-check.md。")
 

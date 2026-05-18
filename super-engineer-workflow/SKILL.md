@@ -65,6 +65,7 @@ description: Mandatory for any user message that starts with `/se:` or asks to r
 - `/se:propose` 完成后只能提示下一步 `/se:bridge`，禁止提示 `/se:apply`
 - `/se:propose` 的完成回复中禁止出现“确认无误后执行 `/se:apply`”“通过 `/se:apply` 进入实现阶段”等表达；如果需要提示后续，只能写“下一步：执行 `/se:bridge` 生成待审核 todo”
 - `/se:bridge` 完成后只能提示人工审核 todo，审核通过后发送 `/se:apply`；禁止自动执行 `/se:apply`
+- 在进入 `/se:apply` 前，如果人工审核发现需求或 todo 有偏差，允许重新执行 `/se:propose <change-name>` 修正当前 change，然后再次执行 `/se:bridge` 重建待审核 todo；AI 禁止手工同步 `tasks.md` 到 `todo.md`
 - `/se:bridge` 完成后禁止自动调用 plan、apply、start-implement、review、verify 或修改代码
 - `/se:apply` 必须通过标准脚本序列推进：必要时先 `python3 scripts/run-workflow.py plan`，然后 `start-implement`，代码实现完成后 `finish-implement`，`auto` 模式下继续 `review` 和 `verify`；禁止只手工写状态或只手工发送通知后宣布完成
 - `/se:verify` 通过前禁止提示 `/se:archive-check`
@@ -75,6 +76,7 @@ description: Mandatory for any user message that starts with `/se:` or asks to r
 - 如果 workflow 已完成但缺少 `notification.json`、`verify.json` 或输出目录下的 Markdown 报告，必须通过 `/se:verify` 重新走标准验证收口；不要新增独立收口命令，也不要手工拼接通知
 - OpenSpec 模式必须使用 `<workspace>/.super-engineer/se-state.json` 作为阶段状态机；执行 `/se:bridge`、`/se:plan`、`/se:apply`、`/se:verify`、`/se:archive-check`、`/se:archive` 前必须通过脚本状态校验
 - AI 不能自行决定下一步命令，只能依据 `se-state.json.allowed_next` 汇报下一步；如果用户请求的命令不在允许范围内，必须停止并说明当前 `phase` 和允许命令
+- 当脚本输出 `final_reply_must` 或 `se_reply_constraint_begin` / `se_reply_constraint_end` 时，AI 最终回复必须遵守该约束；禁止在最终回复中追加与 `allowed_next` 冲突的 `/se:*` 命令
 
 门禁命令停止规则：
 
@@ -106,10 +108,14 @@ description: Mandatory for any user message that starts with `/se:` or asks to r
 - `demand_file` 是可选原始需求输入，主要给 `/se:propose` 使用；如果配置了，`/se:propose` 必须优先读取它
 - `reference_files` 是 `/se:propose`、`/se:plan`、review 的强上下文；如果配置了，`/se:propose` 必须读取真实存在的参考文件并写入 `propose-input.json`
 - `workspace.yml` 支持 `vars` 变量；路径字段可以使用 `${name}` 或 `${vars.name}` 引用变量，例如 `${demand_name}`
+- `/se:bridge` 支持相对路径、绝对路径、`${demand_name}` 变量和 `openspec.changes_dir`；AI 禁止声称桥接脚本要求绝对路径或必须显式配置 `openspec.change_dir`
+- 如果 `/se:bridge` 找不到当前 change，正确处理是提示先执行 `/se:propose <change-name>` 记录 active change，禁止要求用户改 `workspace.yml` 为绝对路径或新增 `openspec.change_dir`
 - `workflow_source=todo` 时，`todo_file` 是用户维护的真实输入
 - `workflow_source=openspec` 时，`todo_file` 是桥接后的执行入口，内容来自 OpenSpec `tasks.md`
+- `workflow_source=openspec` 时，只有显式执行 `/se:bridge` 才允许重写 `todo_file`；`/se:init`、`/se:plan`、`/se:apply` 内部初始化只能校验已有 `todo_file`，不能覆盖人工审核后的 todo
 - `workflow_source=openspec` 时，OpenSpec change 名称只能由 `/se:propose <change-name>` 显式指定；不得从 `vars.demand_name` 或需求标题推导
 - `workspace.yml.verify_commands` 可覆盖自动识别出的验证命令；当存在覆盖命令时，verify 阶段必须优先使用覆盖命令
+- 项目识别优先使用 `adapters/*.yml` 语言适配器，并保留内置 Maven、Gradle、Node、Go、Python、Rust、.NET、PHP、Ruby、Make、CMake 识别兜底
 - 用户真实 Skill 配置位于 `~/.super-engineer/skill-config.yml`
 - 如果启用了 `notification.pushplus.ordinary`，其中的 `token` 必须合法
 - 如果启用了 `notification.feishu`，必须提供合法的飞书机器人 `webhook_url`

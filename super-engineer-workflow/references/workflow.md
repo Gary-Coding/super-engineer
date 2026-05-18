@@ -168,7 +168,7 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 - `workflow_source=openspec` 时，`propose-openspec` 优先调用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 - `workflow_source=openspec` 时，`review` / `verify` 会自动把执行摘要写回 `openspec.writeback_dir`
 - OpenSpec 长期规格归档建议显式执行 `prepare-archive-openspec` 与 `archive-openspec`；归档检查会结合 OpenSpec CLI status 与 super-engineer 的 spec baseline 冲突检测
-- `prepare-archive-openspec` 会检测 spec baseline 是否发生变化；只有 `merge_mode=safe_merge` 才允许自动归档
+- `prepare-archive-openspec` 会检测 spec baseline 是否发生变化；只有 `merge_mode=safe_merge` 才允许后续归档
 - `auto` 模式下，除非进入硬阻塞，否则不能在对话里要求用户批准继续
 - 工作流总耗时按当前会话开始到 verify 收口结束的真实墙钟时间计算
 - AI 禁止编辑 `<workspace>/workspace.yml`

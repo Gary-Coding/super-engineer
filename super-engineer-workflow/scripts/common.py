@@ -464,9 +464,20 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
             else:
                 changes_dir = (root / "openspec" / "changes").resolve()
 
-        inferred_change_name = active_change_name or configured_change_name or state_change_name or bridge_change_name
-        if inferred_change_name and not re.fullmatch(r"[a-z][a-z0-9-]*", inferred_change_name):
-            inferred_change_name = ""
+        def usable_change_name(candidate: str, require_existing_dir: bool) -> str:
+            normalized = str(candidate).strip()
+            if not normalized or not re.fullmatch(r"[a-z][a-z0-9-]*", normalized):
+                return ""
+            if require_existing_dir and not (changes_dir / normalized).exists():
+                return ""
+            return normalized
+
+        inferred_change_name = (
+            usable_change_name(active_change_name, True)
+            or usable_change_name(configured_change_name, False)
+            or usable_change_name(state_change_name, True)
+            or usable_change_name(bridge_change_name, True)
+        )
 
         if inferred_change_name:
             change_name = inferred_change_name
@@ -605,7 +616,7 @@ def create_session(config: dict[str, Any]) -> dict[str, Any]:
     )
     Path(session_meta["data_dir"]).mkdir(parents=True, exist_ok=True)
     Path(session_meta["report_dir"]).mkdir(parents=True, exist_ok=True)
-    write_json(current_session_file(config), session_meta)
+    write_managed_json(config, current_session_file(config), session_meta)
     return session_meta
 
 
@@ -625,6 +636,15 @@ def data_artifact_path(config: dict[str, Any], name: str, session_meta: dict[str
 def report_artifact_path(config: dict[str, Any], name: str, session_meta: dict[str, Any] | None = None) -> Path:
     meta = _normalize_session_meta(config, session_meta or current_session_meta(config))
     return Path(meta["report_dir"]) / name
+
+
+def workspace_relative_path(config: dict[str, Any], path: Path | str) -> str:
+    resolved = Path(str(path)).resolve()
+    root = Path(str(config.get("__workspace_root", ""))).resolve()
+    try:
+        return str(resolved.relative_to(root))
+    except ValueError:
+        return resolved.name
 
 
 def artifact_path(config: dict[str, Any], name: str) -> Path:
@@ -647,15 +667,31 @@ SE_PHASE_ALLOWED_NEXT: dict[str, list[str]] = {
 
 
 RUN_COMMAND_TO_SE_COMMAND: dict[str, str] = {
+    "route-se": "",
     "propose-openspec": "/se:propose",
     "bootstrap-openspec": "/se:bridge",
     "plan": "/se:plan",
+    "apply": "/se:apply",
     "start-implement": "/se:apply",
     "finish-implement": "/se:apply",
     "review": "/se:review",
     "verify": "/se:verify",
     "prepare-archive-openspec": "/se:archive-check",
     "archive-openspec": "/se:archive",
+}
+
+
+SE_COMMAND_TO_RUN_COMMAND: dict[str, str] = {
+    "/se:init": "init",
+    "/se:propose": "propose-openspec",
+    "/se:bridge": "bootstrap-openspec",
+    "/se:plan": "plan",
+    "/se:apply": "apply",
+    "/se:review": "review",
+    "/se:verify": "verify",
+    "/se:archive-check": "prepare-archive-openspec",
+    "/se:archive": "archive-openspec",
+    "/se:status": "status",
 }
 
 
@@ -678,7 +714,7 @@ def write_se_state(config: dict[str, Any], state: dict[str, Any]) -> Path:
     state["allowed_next"] = list(SE_PHASE_ALLOWED_NEXT.get(phase, []))
     state["updated_at"] = now_iso()
     path = se_state_path(config)
-    write_json(path, state)
+    write_managed_json(config, path, state)
     return path
 
 
@@ -822,8 +858,13 @@ def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any
 
     errors: list[str] = []
     if se_command == "/se:bridge":
-        if phase != "proposed" or se_command not in allowed_next:
-            errors.append("当前状态不允许执行 /se:bridge，请先执行 /se:propose <change-name>。")
+        if not openspec_change_name(config):
+            errors.append(
+                "缺少当前 OpenSpec change。请先执行 /se:propose <change-name>；"
+                "workspace.yml 支持相对路径、${demand_name} 和 openspec.changes_dir，不要改成绝对路径或手工配置 openspec.change_dir。"
+            )
+        if phase not in ("proposed", "bridged"):
+            errors.append("当前状态不允许执行 /se:bridge，请先执行 /se:propose <change-name>，或在进入交付前停留在 bridged 阶段重新桥接。")
         for key in ("proposal", "design", "tasks"):
             if not _se_state_artifact_exists(str(artifacts.get(key, ""))):
                 errors.append(f"缺少 OpenSpec 产物：{key}")
@@ -863,6 +904,36 @@ def require_se_state(config: dict[str, Any], run_command: str) -> None:
     errors = result.get("errors", [])
     message = "\n".join(str(item) for item in errors) if errors else "当前工作流状态不允许执行该命令。"
     raise SystemExit(message)
+
+
+def parse_se_command(text: str) -> dict[str, Any]:
+    stripped = str(text).strip()
+    match = re.match(r"^(/se:[a-z][a-z-]*)(?:\s+([A-Za-z0-9][A-Za-z0-9-]*))?(?:\s|$)", stripped)
+    if not match:
+        raise ValueError("未识别到 /se:* 命令。")
+    se_command = match.group(1)
+    argument = match.group(2) or ""
+    if se_command not in SE_COMMAND_TO_RUN_COMMAND:
+        raise ValueError(f"不支持的 /se:* 命令：{se_command}")
+    return {
+        "se_command": se_command,
+        "run_command": SE_COMMAND_TO_RUN_COMMAND[se_command],
+        "argument": argument,
+    }
+
+
+def assert_managed_artifact(path: Path, config: dict[str, Any]) -> Path:
+    resolved = path.resolve()
+    data_root = artifacts_dir(config).resolve()
+    output_root = output_dir(config).resolve()
+    writeback = openspec_writeback_dir(config).resolve() if workflow_source(config) == "openspec" else None
+    allowed_roots = [data_root, output_root]
+    if writeback:
+        allowed_roots.append(writeback)
+        allowed_roots.append(openspec_archive_root(config).resolve())
+    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+        raise ValueError(f"拒绝写入非工作流托管产物：{resolved}")
+    return resolved
 
 
 def ensure_runtime_dirs(config: dict[str, Any]) -> None:
@@ -961,7 +1032,8 @@ def write_active_openspec_change(config: dict[str, Any], change_name: str) -> Pa
     selected_name = validate_openspec_change_name(change_name)
     active_path = active_openspec_change_path(config["__workspace_root"])
     active_path.parent.mkdir(parents=True, exist_ok=True)
-    write_json(
+    write_managed_json(
+        config,
         active_path,
         {
             "change_name": selected_name,
@@ -1083,16 +1155,22 @@ def openspec_bridge_context_path(config: dict[str, Any]) -> Path:
     return artifacts_dir(config) / "openspec-bridge-context.json"
 
 
-def transform_openspec_tasks_to_todo(tasks_text: str, change_name: str, change_dir: Path) -> str:
+def transform_openspec_tasks_to_todo(tasks_text: str, change_name: str, change_dir: Path, service_names: list[str] | None = None) -> str:
     lines = [
         "# 限制条件",
         f"- 需求来源是 OpenSpec change：{change_name}",
         f"- OpenSpec 变更目录是 {change_dir}",
         "- 优先以 proposal.md、design.md 和 specs/ 下的 delta specs 作为业务边界",
+    ]
+    for service_name in unique(service_names or []):
+        lines.append(f"- 修改的服务是 {service_name}")
+    lines.extend(
+        [
         "",
         "# 待办事项",
         "",
-    ]
+        ]
+    )
     has_tasks = False
     for raw_line in tasks_text.splitlines():
         stripped = raw_line.rstrip()
@@ -1132,6 +1210,36 @@ def transform_openspec_tasks_to_todo(tasks_text: str, change_name: str, change_d
     if lines[-1] != "":
         lines.append("")
     return "\n".join(lines)
+
+
+def openspec_source_texts(config: dict[str, Any], tasks_text: str) -> list[str]:
+    openspec = config.get("openspec", {})
+    proposal_file = Path(str(openspec.get("proposal_file", "")))
+    design_file = Path(str(openspec.get("design_file", "")))
+    proposal_text = read_text(proposal_file) if proposal_file.exists() else ""
+    design_text = read_text(design_file) if design_file.exists() else ""
+    texts = [tasks_text, proposal_text, design_text]
+    specs_dir = Path(str(openspec.get("specs_dir", ""))).expanduser()
+    if specs_dir.exists() and specs_dir.is_dir():
+        for path in sorted(specs_dir.rglob("*.md")):
+            texts.append(read_text(path))
+    return texts
+
+
+def infer_openspec_service_hints(config: dict[str, Any], tasks_text: str) -> list[str]:
+    source_text = "\n".join(openspec_source_texts(config, tasks_text))
+    hints = _extract_service_hints_from_lines(source_text.splitlines())
+    try:
+        root = code_root(config)
+        candidates = [root] if looks_like_project_root(root) else find_candidate_codebases(root)
+        lowered_source = source_text.lower()
+        for candidate in candidates:
+            candidate_name = candidate.name.strip()
+            if candidate_name and candidate_name.lower() in lowered_source:
+                hints.append(candidate_name)
+    except Exception:
+        pass
+    return unique(hints)
 
 
 def build_openspec_bridge_context(config: dict[str, Any], tasks_text: str) -> dict[str, Any]:
@@ -1197,6 +1305,7 @@ def build_openspec_bridge_context(config: dict[str, Any], tasks_text: str) -> di
             f"需求来源是 OpenSpec change：{openspec.get('change_name', '')}",
             "优先以 proposal.md、design.md 和 specs/ 下的 delta specs 作为业务边界",
         ],
+        "service_hints": infer_openspec_service_hints(config, tasks_text),
         "acceptance_criteria": unique(acceptance_criteria),
         "compatibility_notes": unique(compatibility_notes),
         "spec_merge_targets": spec_merge_targets,
@@ -1204,7 +1313,7 @@ def build_openspec_bridge_context(config: dict[str, Any], tasks_text: str) -> di
     }
 
 
-def ensure_workflow_inputs(config: dict[str, Any]) -> dict[str, Any]:
+def ensure_workflow_inputs(config: dict[str, Any], *, allow_bridge_write: bool = False) -> dict[str, Any]:
     source = workflow_source(config)
     todo_file = todo_path(config)
     result = {
@@ -1223,23 +1332,40 @@ def ensure_workflow_inputs(config: dict[str, Any]) -> dict[str, Any]:
         result["todo_needs_edit"] = is_todo_template_placeholder(todo_text)
         return result
 
+    change_name = openspec_change_name(config)
+    if not change_name:
+        raise ValueError(
+            "缺少当前 OpenSpec change。请先执行 /se:propose <change-name> 记录 active change；"
+            "不需要把 workspace.yml 改成绝对路径，也不需要显式配置 openspec.change_dir。"
+        )
     tasks_file = openspec_tasks_path(config)
     if not tasks_file.exists():
-        raise FileNotFoundError(f"OpenSpec tasks 文件不存在：{tasks_file}")
+        raise FileNotFoundError(
+            f"OpenSpec tasks 文件不存在：{tasks_file}。请确认已执行 /se:propose {change_name} 并生成 tasks.md；"
+            "不要手工生成桥接产物。"
+        )
     tasks_text = read_text(tasks_file)
+    existing = read_text(todo_file)
+    if existing.strip() and not allow_bridge_write:
+        result["bridge_source"] = str(tasks_file)
+        result["todo_needs_edit"] = is_todo_template_placeholder(existing)
+        bridge_context = build_openspec_bridge_context(config, tasks_text)
+        write_managed_json(config, openspec_bridge_context_path(config), bridge_context)
+        return result
+    service_names = infer_openspec_service_hints(config, tasks_text)
     bridged_todo = transform_openspec_tasks_to_todo(
         tasks_text,
         str(config.get("openspec", {}).get("change_name", tasks_file.parent.name)),
         openspec_change_dir(config),
+        service_names,
     )
-    existing = read_text(todo_file)
     if existing != bridged_todo:
         write_text(todo_file, bridged_todo)
         result["bridge_generated"] = True
     result["bridge_source"] = str(tasks_file)
     result["todo_needs_edit"] = is_todo_template_placeholder(bridged_todo)
     bridge_context = build_openspec_bridge_context(config, tasks_text)
-    write_json(openspec_bridge_context_path(config), bridge_context)
+    write_managed_json(config, openspec_bridge_context_path(config), bridge_context)
     return result
 
 
@@ -1275,6 +1401,14 @@ def write_json(path: Path, payload: Any) -> None:
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp_path.replace(path)
+
+
+def write_managed_json(config: dict[str, Any], path: Path, payload: Any) -> None:
+    write_json(assert_managed_artifact(path, config), payload)
+
+
+def write_managed_text(config: dict[str, Any], path: Path, content: str) -> None:
+    write_text(assert_managed_artifact(path, config), content)
 
 
 def unique(items: list[str]) -> list[str]:
@@ -1536,29 +1670,36 @@ def constraint_items(todo_text: str) -> list[str]:
     return parse_todo_document(todo_text)["constraints"]
 
 
-def service_hints(todo_text: str) -> list[str]:
+def _extract_service_hints_from_lines(lines: list[str]) -> list[str]:
     hints: list[str] = []
-    candidate_lines = constraint_items(todo_text)
-    if not candidate_lines:
-        candidate_lines = [line.strip() for line in todo_text.splitlines() if line.strip()]
     patterns = [
         r"(?:修改的服务|目标服务|服务名|服务)\s*(?:是|为|:|：)\s*([A-Za-z0-9._-]+)",
         r"(?:修改的服务|目标服务|服务名|服务)\s*(?:包括|包含|有|涉及)\s*([A-Za-z0-9._,\-、，\s]+)",
         r"(?:仓库|项目)\s*(?:是|为|:|：)\s*([A-Za-z0-9._-]+)",
         r"(?:仓库|项目)\s*(?:包括|包含|有|涉及)\s*([A-Za-z0-9._,\-、，\s]+)",
     ]
-    for line in candidate_lines:
+    for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
         for pattern in patterns:
             match = re.search(pattern, stripped, flags=re.IGNORECASE)
-            if match:
-                raw_value = match.group(1).strip()
-                for part in re.split(r"[、，,\s]+", raw_value):
-                    normalized = part.strip()
-                    if normalized:
-                        hints.append(normalized)
+            if not match:
+                continue
+            raw_value = match.group(1).strip()
+            for part in re.split(r"[、，,\s]+", raw_value):
+                normalized = part.strip()
+                if normalized:
+                    hints.append(normalized)
+    return unique(hints)
+
+
+def service_hints(todo_text: str) -> list[str]:
+    candidate_lines = constraint_items(todo_text)
+    hints = _extract_service_hints_from_lines(candidate_lines)
+    if not hints:
+        candidate_lines = [line.strip() for line in todo_text.splitlines() if line.strip()]
+        hints = _extract_service_hints_from_lines(candidate_lines)
     return unique(hints)
 
 
@@ -1686,6 +1827,13 @@ def resolve_target_codebases(config: dict[str, Any], todo_text: str | None = Non
     candidates = find_candidate_codebases(root)
     if not candidates:
         raise ValueError(f"code_path 下未找到可识别的项目目录：{root}")
+    if not hints:
+        lowered_todo = todo_text.lower()
+        for candidate in candidates:
+            candidate_name = candidate.name.strip()
+            if candidate_name and candidate_name.lower() in lowered_todo:
+                hints.append(candidate_name)
+        hints = unique(hints)
 
     matched_candidates: list[Path] = []
     matched_pairs: list[dict[str, str]] = []
@@ -1890,7 +2038,50 @@ def _apply_verify_override(config: dict[str, Any] | None, codebase: Path, detect
     return detected
 
 
+def load_project_adapters() -> list[dict[str, Any]]:
+    adapters_dir = skill_root() / "adapters"
+    if not adapters_dir.exists():
+        return []
+    adapters: list[dict[str, Any]] = []
+    for path in sorted(adapters_dir.glob("*.yml")):
+        try:
+            adapter = parse_simple_yaml(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(adapter, dict):
+            continue
+        adapter["__path"] = str(path)
+        adapters.append(adapter)
+    return adapters
+
+
+def adapter_matches(codebase: Path, adapter: dict[str, Any]) -> bool:
+    detect_files = adapter.get("detect_files", [])
+    if isinstance(detect_files, str):
+        detect_files = [detect_files]
+    if not isinstance(detect_files, list) or not detect_files:
+        return False
+    return any((codebase / str(item)).exists() for item in detect_files if str(item).strip())
+
+
+def adapter_detection(codebase: Path) -> dict[str, str]:
+    for adapter in load_project_adapters():
+        if not adapter_matches(codebase, adapter):
+            continue
+        return {
+            "adapter_id": str(adapter.get("id", "")).strip(),
+            "language": str(adapter.get("language", "")).strip(),
+            "build_tool": str(adapter.get("build_tool", "")).strip(),
+            "test_command": str(adapter.get("test_command", "")).strip(),
+            "start_command": str(adapter.get("start_command", "")).strip(),
+            "verify_command": str(adapter.get("verify_command", "")).strip(),
+            "review_profile": str(adapter.get("review_profile", "")).strip(),
+        }
+    return {}
+
+
 def detect_project(codebase: Path, config: dict[str, Any] | None = None) -> dict[str, str]:
+    adapter = adapter_detection(codebase)
     has_maven = (codebase / "pom.xml").exists() or (codebase / "mvnw").exists()
     has_gradle = (
         (codebase / "build.gradle").exists()
@@ -1986,23 +2177,31 @@ def detect_project(codebase: Path, config: dict[str, Any] | None = None) -> dict
         test_command = "ctest --test-dir build" if (codebase / "build").exists() else ""
         verify_command = test_command
 
-    return _apply_verify_override(config, codebase, {
+    detected = {
+        "adapter_id": adapter.get("adapter_id", ""),
         "language": language,
         "build_tool": build_tool,
         "test_command": test_command,
         "start_command": start_command,
         "verify_command": verify_command,
-    })
+        "review_profile": adapter.get("review_profile", ""),
+    }
+    for key in ("language", "build_tool", "test_command", "start_command", "verify_command"):
+        if not detected.get(key) and adapter.get(key):
+            detected[key] = adapter[key]
+    return _apply_verify_override(config, codebase, detected)
 
 
 def summarize_detected_projects(projects: list[dict[str, str]]) -> dict[str, str]:
     if not projects:
         return {
+            "adapter_id": "",
             "language": "",
             "build_tool": "",
             "test_command": "",
             "start_command": "",
             "verify_command": "",
+            "review_profile": "",
         }
 
     def summarize_field(name: str) -> str:
@@ -2014,11 +2213,13 @@ def summarize_detected_projects(projects: list[dict[str, str]]) -> dict[str, str
         return "multiple"
 
     return {
+        "adapter_id": summarize_field("adapter_id"),
         "language": summarize_field("language"),
         "build_tool": summarize_field("build_tool"),
         "test_command": summarize_field("test_command"),
         "start_command": summarize_field("start_command"),
         "verify_command": summarize_field("verify_command"),
+        "review_profile": summarize_field("review_profile"),
     }
 
 
@@ -2379,6 +2580,9 @@ def build_workflow_notification(
     completed_count = progress.get("completed_task_count", 0)
     total_count = progress.get("total_task_count", 0)
     pending_count = progress.get("pending_task_count", 0)
+    if overall_result == "通过" and phase_text == "done" and total_count:
+        completed_count = total_count
+        pending_count = 0
 
     if template == "html":
         lines = [
@@ -2449,12 +2653,15 @@ def build_feishu_notification_payload(
     completed_count = progress.get("completed_task_count", 0)
     total_count = progress.get("total_task_count", 0)
     pending_count = progress.get("pending_task_count", 0)
+    if overall_result == "通过" and phase_text == "done" and total_count:
+        completed_count = total_count
+        pending_count = 0
     status_emoji = "✅" if overall_result == "通过" else "❌"
     header_template = "green" if overall_result == "通过" else "red"
     reports = {
-        "plan.md": str(report_artifact_path(config, "plan.md", session_meta)),
-        "review.md": str(report_artifact_path(config, "review.md", session_meta)),
-        "verify.md": str(report_artifact_path(config, "verify.md", session_meta)),
+        "plan.md": workspace_relative_path(config, report_artifact_path(config, "plan.md", session_meta)),
+        "review.md": workspace_relative_path(config, report_artifact_path(config, "review.md", session_meta)),
+        "verify.md": workspace_relative_path(config, report_artifact_path(config, "verify.md", session_meta)),
     }
     return {
         "msg_type": "interactive",
@@ -2700,7 +2907,7 @@ def notify_workflow_result(
         )
         result["results"] = route_results
         result["sent_at"] = now_iso()
-    write_json(notification_path, result)
+    write_managed_json(config, notification_path, result)
     return result
 
 

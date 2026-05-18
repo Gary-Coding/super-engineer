@@ -15,8 +15,8 @@ from common import (
     workflow_source,
     workspace_root,
     load_workspace_config,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -92,8 +92,8 @@ def main() -> None:
         "archived_to": str(archive_target),
         "synced_specs": synced_specs,
     }
-    write_json(archive_target / "super-engineer" / "archive-result.json", payload)
-    write_text(archive_target / "super-engineer" / "archive-result.md", build_markdown(payload))
+    write_managed_json(config, archive_target / "super-engineer" / "archive-result.json", payload)
+    write_managed_text(config, archive_target / "super-engineer" / "archive-result.md", build_markdown(payload))
     update_se_state(
         config,
         phase="archived",

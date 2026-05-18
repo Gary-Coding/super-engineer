@@ -16,8 +16,8 @@ from common import (
     read_json,
     report_artifact_path,
     workspace_root,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -247,7 +247,8 @@ def main() -> None:
         )
         findings.extend(build_findings(plan_files, changed, repo_mode, repo_name))
     review_result = "blocked" if any(item.get("blocking") for item in findings) else "passed"
-    write_json(
+    write_managed_json(
+        config,
         data_artifact_path(config, "review.json", session_meta),
         {
             "session_id": session_meta["session_id"],
@@ -257,7 +258,8 @@ def main() -> None:
             "created_at": now_iso(),
         },
     )
-    write_text(
+    write_managed_text(
+        config,
         report_artifact_path(config, "review.md", session_meta),
         build_review_markdown(plan, sections, findings) + "\n",
     )
@@ -283,7 +285,7 @@ def main() -> None:
             "updated_at": now_iso(),
         }
     )
-    write_json(data_artifact_path(config, "status.json", session_meta), status)
+    write_managed_json(config, data_artifact_path(config, "status.json", session_meta), status)
     if review_result == "blocked":
         raise SystemExit("代码审查发现阻塞项，请查看 review.md。")
 

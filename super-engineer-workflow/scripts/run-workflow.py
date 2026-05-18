@@ -13,6 +13,7 @@ from common import (
     ensure_status,
     load_workspace_config,
     now_iso,
+    parse_se_command,
     planned_codebases,
     planned_codebase,
     read_json,
@@ -24,12 +25,34 @@ from common import (
     update_se_state,
     validate_se_state,
     workflow_source,
-    write_json,
+    write_managed_json,
     workspace_root,
 )
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+SE_ROUTE_REPLY_CONSTRAINTS: dict[str, dict[str, str]] = {
+    "/se:propose": {
+        "phase": "proposed",
+        "allowed_next": "/se:bridge",
+        "forbidden_next": "/se:plan,/se:apply",
+        "final_reply_must": "代码暂未修改。下一步只能执行 /se:bridge，把当前 OpenSpec tasks.md 桥接为待审核 todo.md。",
+    },
+    "/se:bridge": {
+        "phase": "bridged",
+        "allowed_next": "人工审核 todo.md 后 /se:apply",
+        "forbidden_next": "自动执行 /se:plan,自动执行 /se:apply,代码实现",
+        "final_reply_must": "桥接 todo 已生成。请先人工审核 todo.md，审核通过后再发送 /se:apply。",
+    },
+    "/se:plan": {
+        "phase": "planned",
+        "allowed_next": "/se:apply",
+        "forbidden_next": "代码实现,review,verify",
+        "final_reply_must": "计划已生成。下一步只有在确认计划后执行 /se:apply。",
+    },
+}
 
 
 def run_python(script_name: str, extra_args: list[str]) -> None:
@@ -72,7 +95,7 @@ def update_status_for_implement(workspace: Path | None, current_task: str, next_
             "updated_at": now_iso(),
         }
     )
-    write_json(status_path, status)
+    write_managed_json(config, status_path, status)
 
 
 def command_status(workspace: Path | None) -> None:
@@ -120,6 +143,52 @@ def command_validate_state(workspace: Path | None, command: str | None) -> None:
         print(f"error={error}")
     if not result.get("valid"):
         raise SystemExit(1)
+
+
+def command_route_se(workspace: Path | None, command_text: str | None, timeout_seconds: int, force: bool = False) -> None:
+    if not command_text:
+        raise SystemExit("缺少 /se:* 命令文本。")
+    parsed = parse_se_command(command_text)
+    se_command = parsed["se_command"]
+    run_command = parsed["run_command"]
+    argument = str(parsed.get("argument", "")).strip()
+    print(f"se_command={se_command}")
+    print(f"run_command={run_command}")
+    if argument:
+        print(f"argument={argument}")
+    if se_command == "/se:init":
+        command_init(workspace)
+    elif se_command == "/se:propose":
+        command_propose_openspec(workspace, argument or None)
+    elif se_command == "/se:bridge":
+        command_bootstrap_openspec(workspace)
+    elif se_command == "/se:plan":
+        command_plan(workspace)
+    elif se_command == "/se:apply":
+        command_apply(workspace, timeout_seconds)
+    elif se_command == "/se:review":
+        command_review(workspace)
+    elif se_command == "/se:verify":
+        command_verify(workspace, timeout_seconds, force)
+    elif se_command == "/se:archive-check":
+        command_prepare_archive_openspec(workspace)
+    elif se_command == "/se:archive":
+        command_archive_openspec(workspace)
+    elif se_command == "/se:status":
+        command_status(workspace)
+    else:
+        raise SystemExit(f"不支持的 /se:* 命令：{se_command}")
+    print_route_reply_constraint(se_command)
+
+
+def print_route_reply_constraint(se_command: str) -> None:
+    constraint = SE_ROUTE_REPLY_CONSTRAINTS.get(se_command)
+    if not constraint:
+        return
+    print("se_reply_constraint_begin")
+    for key in ("phase", "allowed_next", "forbidden_next", "final_reply_must"):
+        print(f"{key}={constraint[key]}")
+    print("se_reply_constraint_end")
 
 
 def command_next(workspace: Path | None, timeout_seconds: int) -> None:
@@ -262,6 +331,10 @@ def command_finish_implement(workspace: Path | None) -> None:
     )
     command_review(workspace)
     command_verify(workspace, 300)
+    config = load_workspace_config(workspace)
+    verify_result = read_json(data_artifact_path(config, "verify.json"), {})
+    if workflow_source(config) == "openspec" and str(verify_result.get("result", "")).strip() == "通过":
+        command_prepare_archive_openspec(workspace)
 
 
 def command_review(workspace: Path | None) -> None:
@@ -308,10 +381,27 @@ def command_verify(workspace: Path | None, timeout_seconds: int, force: bool = F
         run_python("writeback-openspec.py", ["--workspace", str(workspace)] if workspace else [])
 
 
+def command_apply(workspace: Path | None, timeout_seconds: int) -> None:
+    config = load_workspace_config(workspace)
+    require_se_state(config, "apply")
+    session_meta = current_session_meta(config)
+    plan_path = data_artifact_path(config, "plan.json", session_meta)
+    if not plan_path.exists():
+        command_plan(workspace)
+        config = load_workspace_config(workspace)
+    command_start_implement(workspace)
+    print("apply_phase=implementing")
+    print("next_action=AI 必须按当前 plan.json 修改业务代码；代码完成后调用 finish-implement。")
+    if config["mode"] == "auto":
+        print("auto_mode=enabled")
+        print("auto_note=实现代码仍需 AI 在 start-implement 与 finish-implement 之间完成，后续 self-check/review/verify 由标准脚本推进。")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="super-engineer 统一工作流入口。")
-    parser.add_argument("command", choices=["init", "propose-openspec", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next", "validate-state"])
+    parser.add_argument("command", choices=["route-se", "init", "propose-openspec", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "apply", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next", "validate-state"])
     parser.add_argument("change_name", nargs="?", help="配合 propose-openspec 或 validate-state 使用。")
+    parser.add_argument("--command-text", help="配合 route-se 使用，传入完整 /se:* 命令文本。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--force", action="store_true", help="配合 verify 使用，强制重跑验证并覆盖结果。")
@@ -319,7 +409,9 @@ def main() -> None:
 
     workspace = Path(args.workspace).expanduser() if args.workspace else None
 
-    if args.command == "init":
+    if args.command == "route-se":
+        command_route_se(workspace, args.command_text or args.change_name, args.timeout_seconds, args.force)
+    elif args.command == "init":
         command_init(workspace)
     elif args.command == "propose-openspec":
         command_propose_openspec(workspace, args.change_name)
@@ -335,6 +427,8 @@ def main() -> None:
         command_discover(workspace)
     elif args.command == "plan":
         command_plan(workspace)
+    elif args.command == "apply":
+        command_apply(workspace, args.timeout_seconds)
     elif args.command == "start-implement":
         command_start_implement(workspace)
     elif args.command == "finish-implement":

@@ -14,11 +14,13 @@ from common import (
     openspec_change_dir,
     openspec_writeback_dir,
     read_json,
+    read_text,
     report_artifact_path,
+    todo_path,
     workflow_source,
     workspace_root,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -112,6 +114,56 @@ def residual_risks(plan: dict, review: dict, verify: dict) -> list[str]:
     return risks[:12]
 
 
+def task_mapping(plan: dict, verify: dict, todo_text: str) -> list[dict[str, object]]:
+    verify_result = str(verify.get("result", "")).strip()
+    default_status = "verified" if verify_result == "通过" else "implemented"
+    mappings: list[dict[str, object]] = []
+    for module in list_items(plan.get("task_modules", [])):
+        if not isinstance(module, dict):
+            continue
+        module_title = str(module.get("title", "")).strip()
+        for task in list_items(module.get("tasks", [])):
+            if not isinstance(task, dict):
+                continue
+            title = str(task.get("title", "")).strip()
+            if not title:
+                continue
+            mappings.append(
+                {
+                    "openspec_task": title,
+                    "todo_task": title,
+                    "module": module_title,
+                    "status": default_status,
+                    "evidence": {
+                        "impacted_files": list_items(plan.get("impacted_files", [])),
+                        "review_result": str(plan.get("review_result", "")),
+                        "verify_result": verify_result,
+                    },
+                }
+            )
+    if mappings:
+        return mappings
+    for line in todo_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- ["):
+            continue
+        title = stripped.split("]", 1)[-1].strip()
+        if title:
+            mappings.append(
+                {
+                    "openspec_task": title,
+                    "todo_task": title,
+                    "module": "",
+                    "status": default_status,
+                    "evidence": {
+                        "impacted_files": list_items(plan.get("impacted_files", [])),
+                        "verify_result": verify_result,
+                    },
+                }
+            )
+    return mappings
+
+
 def build_markdown(payload: dict) -> str:
     lines = [
         "# Super Engineer Execution Summary",
@@ -151,6 +203,17 @@ def build_markdown(payload: dict) -> str:
     lines.extend(f"- {item}" for item in payload.get("verify_summary", []))
     lines.extend([
         "",
+        "## Task Mapping",
+    ])
+    mapping = list_items(payload.get("task_mapping", []))
+    if mapping:
+        for item in mapping[:30]:
+            if isinstance(item, dict):
+                lines.append(f"- {item.get('todo_task', '')}: {item.get('status', '')}")
+    else:
+        lines.append("- 暂无")
+    lines.extend([
+        "",
         "## Links",
         f"- plan.md: {payload.get('reports', {}).get('plan_md', '')}",
         f"- review.md: {payload.get('reports', {}).get('review_md', '')}",
@@ -175,6 +238,7 @@ def main() -> None:
     review = read_json(data_artifact_path(config, "review.json", session_meta), {})
     verify = read_json(data_artifact_path(config, "verify.json", session_meta), {})
     status = read_json(data_artifact_path(config, "status.json", session_meta), {})
+    todo_text = read_text(todo_path(config))
     plan_bridge_context = plan.get("bridge_context", {})
     if not isinstance(plan_bridge_context, dict) or not plan_bridge_context:
         plan_bridge_context = read_json(openspec_bridge_context_path(config), {})
@@ -223,6 +287,7 @@ def main() -> None:
             "sections": verify.get("sections", []),
         },
         "acceptance_result": summarize_acceptance(plan, verify),
+        "task_mapping": task_mapping(plan, verify, todo_text),
         "spec_impacts": infer_spec_impacts(plan, plan_bridge_context),
         "residual_risks": residual_risks(plan, review, verify),
         "manual_decisions": [],
@@ -236,8 +301,8 @@ def main() -> None:
     }
 
     output_dir = openspec_writeback_dir(config)
-    write_json(output_dir / "execution-summary.json", payload)
-    write_text(output_dir / "execution-summary.md", build_markdown(payload))
+    write_managed_json(config, output_dir / "execution-summary.json", payload)
+    write_managed_text(config, output_dir / "execution-summary.md", build_markdown(payload))
     print(f"writeback_dir={output_dir}")
     print(f"change_dir={openspec_change_dir(config)}")
 

@@ -25,6 +25,8 @@
 
 `workspace.yml` 是用户维护的工作空间契约。AI 只能读取和校验，禁止自动编辑、重写或格式化。如果配置需要调整，AI 必须停止并说明需要用户修改的字段。
 
+桥接脚本支持相对路径、绝对路径、`${demand_name}` / `${vars.demand_name}` 变量和 `openspec.changes_dir`。AI 禁止因为缺少 active change 就要求用户把路径改成绝对路径，或要求用户显式新增 `openspec.change_dir`。缺少 active change 时，正确下一步是 `/se:propose <change-name>`。
+
 ## 状态产物写入硬约束
 
 AI 禁止直接创建、修改或伪造以下标准工作流产物：
@@ -62,6 +64,8 @@ AI 每次完成 `/se:*` 命令后，只能提示当前阶段允许的下一步�
 除非用户当前消息明确请求该命令，否则 AI 只能提示下一步，不能执行下一步。
 
 `auto` 模式只影响 `/se:apply` 内部从实现到验证的连续推进，不允许让 `/se:propose`、`/se:bridge` 自动串到 `/se:apply`。
+
+如果脚本输出了 `final_reply_must`，或者输出了 `se_reply_constraint_begin` / `se_reply_constraint_end` 包裹的约束，AI 最终回复必须以该约束为准。禁止在最终回复中追加任何与 `allowed_next` 冲突的 `/se:*` 命令。
 
 `openspec` 模式允许的阶段流转：
 
@@ -161,6 +165,8 @@ draft
 
 AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`；不能自动进入 `/se:apply`。
 
+`openspec` 模式下，只有显式执行 `/se:bridge` 才允许从 `tasks.md` 重写 `todo.md`。后续 `/se:plan` 或 `/se:apply` 触发的初始化只能校验已有 `todo.md` 和刷新桥接上下文，不能覆盖人工审核或补充过的 todo。
+
 ## 命令定义
 
 ### `/se:init`
@@ -257,6 +263,13 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 - `workspace.yml` 中 `workflow_source=openspec`
 - 已通过 `/se:propose <change-name>` 记录当前 active change，或 `workspace.yml.openspec.change_dir` 指向明确 change
 - `tasks.md` 存在且包含可执行任务
+- 当前阶段是 `proposed` 或尚未进入交付的 `bridged`；如果已进入 `planned`、`implementing`、`reviewed`、`verified` 等交付阶段，不允许直接重写桥接 todo
+
+重复桥接规则：
+
+- 如果 `/se:bridge` 后人工审核发现 todo 或需求有偏差，应先通过 `/se:propose <change-name>` 修正当前 OpenSpec change
+- 修正后的 `tasks.md` 生成完成后，可以再次执行 `/se:bridge` 重建待审核 todo
+- 禁止 AI 手工把 `tasks.md` 内容同步到 `todo.md`；必须通过 `/se:bridge` 脚本生成
 
 内部动作：
 
@@ -356,7 +369,7 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 - 如果 self-check 无阻塞，继续执行 review
 - 如果 review 无阻塞，继续执行 verify
 - 如果 `workflow_source=openspec` 且 verify 通过，继续执行 `/se:archive-check` 的检查逻辑
-- 只有归档检查结果为 `safe_merge` 时才允许继续归档；如果没有用户明确要求自动归档，只汇报归档状态
+- 只有归档检查结果为 `safe_merge` 时才允许提示 `/se:archive`；默认只汇报归档状态，不自动执行归档
 
 完成后汇报：
 
@@ -367,7 +380,7 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 - residual risks
 - OpenSpec 回写状态
 
-如果 `workflow_source=openspec` 且 verify 通过，下一步只能提示 `/se:archive-check`，不能直接提示 `/se:archive`，除非用户已经明确要求自动归档且归档检查结果满足 `safe_merge`。
+如果 `workflow_source=openspec` 且 verify 通过，下一步只能提示 `/se:archive-check`。只有 `/se:archive-check` 已满足 `safe_merge` 时，才允许提示 `/se:archive`。
 
 ### `/se:review`
 

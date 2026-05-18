@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from common import current_session_meta, data_artifact_path, ensure_status, load_workspace_config, now_iso, read_json, unique, workspace_root, write_json
+from common import current_session_meta, data_artifact_path, ensure_status, load_workspace_config, now_iso, read_json, unique, workspace_root, write_managed_json
 
 
 def main() -> None:
@@ -36,7 +36,7 @@ def main() -> None:
     status["started_at"] = status.get("started_at") or session_meta.get("started_at", "")
     status["updated_at"] = now_iso()
 
-    write_json(status_path, status)
+    write_managed_json(config, status_path, status)
 
 
 if __name__ == "__main__":

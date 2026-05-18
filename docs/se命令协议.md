@@ -26,11 +26,13 @@ AI 收到这些指令后，再根据当前工作空间、当前模式和当前�
 
 ```text
 draft
--> spec_ready
--> todo_generated
+-> proposed
+-> bridged
+-> planned
 -> implementing
--> reviewing
--> verifying
+-> self_checked
+-> reviewed
+-> verified
 -> archive_ready
 -> archived
 ```
@@ -40,6 +42,8 @@ draft
 ```text
 blocked
 ```
+
+实际状态由 `<workspace>/.super-engineer/se-state.json` 维护，脚本会根据 `allowed_next` 拒绝非法跨阶段命令。
 
 ## 3. 命令列表
 
@@ -138,8 +142,9 @@ blocked
 作用：
 
 - 启动交付阶段
-- 执行实现、自查、审查、验证
-- `openspec` 模式下自动回写执行摘要
+- 由脚本进入实现阶段，AI 按 `plan.json` 修改业务代码
+- 实现完成后由脚本推进自查、审查、验证
+- `openspec` 模式下 verify 后自动回写执行摘要
 
 适用模式：
 
@@ -242,7 +247,7 @@ blocked
 
 ```text
 /se:archive
-仅在当前 change 满足安全归档条件时继续归档。
+仅在当前 change 满足安全归档条件时执行归档。
 ```
 
 ### `/se:status`
@@ -321,7 +326,7 @@ blocked
 使用当前工作空间。
 当前模式是 openspec + auto。
 如果没有硬阻塞，自动推进到 verify。
-verify 通过后继续检查归档条件，但只有结果为 safe_merge 时才继续归档。
+verify 通过后继续检查归档条件；如果结果为 safe_merge，状态进入 archive_ready，下一步再执行 /se:archive。
 ```
 
 ```text

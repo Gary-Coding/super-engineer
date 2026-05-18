@@ -22,8 +22,8 @@ from common import (
     resolve_target_codebases,
     todo_path,
     workspace_root,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -164,8 +164,8 @@ def main() -> None:
         "planning_hints": planning_hints,
         "created_at": now_iso(),
     }
-    write_json(data_artifact_path(config, "discovery.json", session_meta), discovery)
-    write_text(report_artifact_path(config, "discovery.md", session_meta), build_discovery_markdown(discovery))
+    write_managed_json(config, data_artifact_path(config, "discovery.json", session_meta), discovery)
+    write_managed_text(config, report_artifact_path(config, "discovery.md", session_meta), build_discovery_markdown(discovery))
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
     status.update(
@@ -178,7 +178,7 @@ def main() -> None:
             "updated_at": now_iso(),
         }
     )
-    write_json(data_artifact_path(config, "status.json", session_meta), status)
+    write_managed_json(config, data_artifact_path(config, "status.json", session_meta), status)
 
 
 if __name__ == "__main__":

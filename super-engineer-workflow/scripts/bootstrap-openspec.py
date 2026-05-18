@@ -16,7 +16,7 @@ def main() -> None:
     config = load_workspace_config(workspace)
     if workflow_source(config) != "openspec":
         raise SystemExit("当前 workspace.yml 未启用 OpenSpec 模式，无需执行 bootstrap-openspec。")
-    result = ensure_workflow_inputs(config)
+    result = ensure_workflow_inputs(config, allow_bridge_write=True)
     update_se_state(
         config,
         phase="bridged",

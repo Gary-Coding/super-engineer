@@ -31,8 +31,8 @@ from common import (
     todo_progress,
     unique,
     workspace_root,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -376,7 +376,7 @@ def main() -> None:
         "configured_code_path": str(config["code_path"]),
         "resolved_code_path": str(primary_codebase),
         "resolved_code_paths": [str(item) for item in codebases],
-        "service_hints": service_hints(todo_text),
+        "service_hints": resolution.get("service_hints") or service_hints(todo_text),
         "service_resolution": resolution,
         "target_codebases": target_codebases,
         "reference_files_used": docs,
@@ -401,8 +401,8 @@ def main() -> None:
         ],
     }
 
-    write_json(data_artifact_path(config, "plan.json", session_meta), plan)
-    write_text(report_artifact_path(config, "plan.md", session_meta), build_plan_markdown(plan) + "\n")
+    write_managed_json(config, data_artifact_path(config, "plan.json", session_meta), plan)
+    write_managed_text(config, report_artifact_path(config, "plan.md", session_meta), build_plan_markdown(plan) + "\n")
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
     phase, awaiting_confirmation, pending_for, next_action = phase_after("plan", config["mode"])
@@ -420,7 +420,7 @@ def main() -> None:
             "updated_at": now_iso(),
         }
     )
-    write_json(data_artifact_path(config, "status.json", session_meta), status)
+    write_managed_json(config, data_artifact_path(config, "status.json", session_meta), status)
 
 
 if __name__ == "__main__":

@@ -30,10 +30,12 @@
 - OpenSpec `tasks.md -> todo_file` 桥接
 - `/se:propose <change-name>` 优先使用 OpenSpec CLI 创建指定 change、读取 status 和 artifact instructions
 - OpenSpec 模式使用 `.super-engineer/se-state.json` 状态机约束阶段跳转
+- `/se:*` 命令可由统一路由入口解析，脚本负责校验阶段与允许命令
 - OpenSpec 执行摘要回写
+- OpenSpec task -> todo -> evidence 映射回写
 - 归档前检查与安全归档
 - 会话级 JSON / Markdown 产物归档
-- 主流语言项目识别与验证命令推断：Java、Node.js / Vue / React、Go、Python、Rust、.NET、PHP、Ruby、Make / CMake
+- 基于 `adapters/*.yml` 的主流语言项目识别与验证命令推断：Java、Node.js / Vue / React、Go、Python，并保留 Rust、.NET、PHP、Ruby、Make / CMake 兜底识别
 - `workspace.yml.verify_commands` 覆盖默认验证命令
 - PushPlus / Feishu 通知
 
@@ -54,6 +56,8 @@
 
 OpenSpec 模式下，脚本会维护 `.super-engineer/se-state.json`。
 `/se:propose` 后只允许 `/se:bridge`，`/se:bridge` 后才允许审核后 `/se:apply`，非法跨阶段命令会被脚本拒绝。
+
+标准工作流产物由脚本写入，AI 不应手工伪造 `.super-engineer` 状态文件、`verify.json`、`notification.json` 或 output 下的标准报告。飞书通知只以 `notification.json` 中由 `run-workflow.py verify` 生成的记录为准。
 
 ## `se` 专属命令
 
@@ -121,6 +125,7 @@ OpenSpec 模式下，脚本会维护 `.super-engineer/se-state.json`。
 使用当前工作空间，当前模式是 openspec + auto。
 我已审核当前桥接 todo，可以进入交付阶段。
 如果没有硬阻塞，自动推进到 verify；verify 通过后继续检查归档条件。
+如果结果为 safe_merge，下一步再执行 /se:archive。
 ```
 
 ## 工作空间配置

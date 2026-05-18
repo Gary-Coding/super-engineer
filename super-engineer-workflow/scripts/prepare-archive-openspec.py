@@ -5,7 +5,11 @@ import argparse
 from pathlib import Path
 
 from common import (
+    current_session_meta,
+    data_artifact_path,
+    ensure_status,
     file_sha256,
+    is_standard_workflow_notification,
     load_workspace_config,
     openspec_change_dir,
     openspec_writeback_dir,
@@ -14,8 +18,8 @@ from common import (
     update_se_state,
     workflow_source,
     workspace_root,
-    write_json,
-    write_text,
+    write_managed_json,
+    write_managed_text,
 )
 
 
@@ -44,6 +48,19 @@ def detect_spec_conflicts(summary: dict) -> list[dict[str, object]]:
                 }
             )
     return conflicts
+
+
+def notification_blockers(config: dict, summary: dict) -> list[str]:
+    session_meta = current_session_meta(config)
+    status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
+    verify = read_json(data_artifact_path(config, "verify.json", session_meta), {})
+    notification = read_json(data_artifact_path(config, "notification.json", session_meta), {})
+    overall_result = str(verify.get("result") or summary.get("verify", {}).get("result", "")).strip()
+    if overall_result != "通过":
+        return ["verify 未通过，不能归档"]
+    if not is_standard_workflow_notification(config, session_meta, status, overall_result, notification):
+        return ["缺少标准 notification.json，或通知不是由 run-workflow.py verify 发送"]
+    return []
 
 
 def build_markdown(payload: dict) -> str:
@@ -111,9 +128,12 @@ def main() -> None:
         raise SystemExit(f"未找到 execution-summary.json：{writeback_dir / 'execution-summary.json'}")
 
     blockers = list(summary.get("archive_blockers", []))
+    if not summary.get("task_mapping"):
+        blockers.append("缺少 OpenSpec task -> todo -> evidence 映射")
     acceptance_result = summary.get("acceptance_result", [])
     if any(item.get("status") != "passed" for item in acceptance_result):
         blockers.append("存在未通过的验收项")
+    blockers.extend(notification_blockers(config, summary))
     spec_conflicts = detect_spec_conflicts(summary)
     if spec_conflicts:
         blockers.append("存在 spec merge 冲突，请先人工处理")
@@ -146,8 +166,8 @@ def main() -> None:
         "openspec_cli": openspec_cli,
         "openspec_incomplete_artifacts": incomplete_artifacts,
     }
-    write_json(writeback_dir / "archive-input.json", payload)
-    write_text(writeback_dir / "merge-preview.md", build_markdown(payload))
+    write_managed_json(config, writeback_dir / "archive-input.json", payload)
+    write_managed_text(config, writeback_dir / "merge-preview.md", build_markdown(payload))
     update_se_state(
         config,
         phase="archive_ready" if payload["archive_ready"] and merge_mode == "safe_merge" else "blocked",
