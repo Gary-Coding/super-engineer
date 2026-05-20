@@ -1244,8 +1244,14 @@ def write_active_openspec_change(config: dict[str, Any], change_name: str) -> Pa
 def openspec_root(config: dict[str, Any]) -> Path:
     changes_dir = str(config.get("openspec", {}).get("changes_dir", "")).strip()
     if changes_dir:
-        return Path(changes_dir).resolve().parent
-    return openspec_change_dir(config).parent.parent.resolve()
+        resolved = Path(changes_dir).resolve()
+        if resolved.name == "changes" and resolved.parent.name == "openspec":
+            return resolved.parent.parent.resolve()
+        return resolved.parent.resolve()
+    change_dir = openspec_change_dir(config)
+    if change_dir.parent.name == "changes" and change_dir.parent.parent.name == "openspec":
+        return change_dir.parent.parent.parent.resolve()
+    return change_dir.parent.parent.resolve()
 
 
 def demand_path(config: dict[str, Any]) -> Path | None:
