@@ -208,11 +208,14 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 - `workspace.yml` 中 `workflow_source=openspec`
 - 用户已在 `/se:propose` 后显式指定 change 名称
 - 优先读取 `workspace.yml.demand_file`
+- `demand_file` 可以是本地 Markdown 路径，也可以是飞书/Lark 云文档 URL
+- 当 `demand_file` 是飞书/Lark 云文档 URL 时，必须由脚本调用官方 `lark-cli docs +fetch` 读取并转换为 Markdown；AI 禁止手工复制云文档正文
+- 如果本机没有安装 `lark-cli`，必须停止并提示用户安装：`npx @larksuite/cli@latest install`，随后执行 `lark-cli config init --new` 和 `lark-cli auth login --recommend`
 - 如果没有 `demand_file`，则使用用户提供的需求描述，或 change 目录已有上下文
 
 内部动作：
 
-- 执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`
+- 执行 `python3 scripts/run-workflow.py route-se --command-text "/se:propose <change-name>"`
 - 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 - 读取 `propose-input.json`
 - 读取 `demand_file` 或用户输入的需求描述
@@ -222,6 +225,9 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 - 创建或更新 `design.md`
 - 创建或更新 `tasks.md`
 - 不进入代码实现
+- 禁止调用 `bootstrap-openspec.py` 或 `run-workflow.py bootstrap-openspec`
+- 禁止创建或修改 `workspace.yml.todo_file` 指向的桥接 todo
+- 完成后 `se-state.phase` 必须停留在 `proposed`
 
 完成后汇报：
 
@@ -273,7 +279,7 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 
 内部动作：
 
-- 执行 `python3 scripts/run-workflow.py bootstrap-openspec`
+- 执行 `python3 scripts/run-workflow.py route-se --command-text "/se:bridge"`，或由受控入口调用 `python3 scripts/run-workflow.py bootstrap-openspec --explicit-se-bridge`
 - 读取 OpenSpec CLI status 和 apply instructions，并写入 bridge context
 - 读取生成后的 `todo_file`
 - 汇总待审核项

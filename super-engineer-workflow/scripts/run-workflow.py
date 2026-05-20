@@ -180,7 +180,7 @@ def command_route_se(workspace: Path | None, command_text: str | None, timeout_s
     elif se_command == "/se:propose":
         command_propose_openspec(workspace, argument or None)
     elif se_command == "/se:bridge":
-        command_bootstrap_openspec(workspace)
+        command_bootstrap_openspec(workspace, explicit_se_bridge=True)
     elif se_command == "/se:plan":
         command_plan(workspace)
     elif se_command == "/se:apply":
@@ -239,9 +239,16 @@ def command_init(workspace: Path | None) -> None:
     run_python("init-workspace.py", args)
 
 
-def command_bootstrap_openspec(workspace: Path | None) -> None:
+def command_bootstrap_openspec(workspace: Path | None, *, explicit_se_bridge: bool = False) -> None:
+    if not explicit_se_bridge:
+        raise SystemExit(
+            "拒绝执行桥接：bootstrap-openspec 只能由用户显式 /se:bridge 触发。"
+            "请通过 route-se --command-text '/se:bridge' 或带 --explicit-se-bridge 的受控入口执行。"
+        )
     require_se_state(load_workspace_config(workspace), "bootstrap-openspec")
-    args = ["--workspace", str(workspace)] if workspace else []
+    args = ["--explicit-se-bridge"]
+    if workspace:
+        args.extend(["--workspace", str(workspace)])
     run_python("bootstrap-openspec.py", args)
 
 
@@ -250,6 +257,14 @@ def command_propose_openspec(workspace: Path | None, change_name: str | None = N
     if change_name:
         args.append(change_name)
     run_python("propose-openspec.py", args)
+    config = load_workspace_config(workspace)
+    state = read_se_state(config)
+    phase = str(state.get("phase", "")).strip()
+    if phase != "proposed":
+        raise SystemExit(
+            f"/se:propose 后状态必须停留在 proposed，当前 phase={phase}。"
+            "请停止当前回复，不要生成 todo.md，不要进入 plan/apply。"
+        )
 
 
 def command_writeback_openspec(workspace: Path | None) -> None:
@@ -442,6 +457,7 @@ def main() -> None:
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--force", action="store_true", help="配合 verify 使用，强制重跑验证并覆盖结果。")
+    parser.add_argument("--explicit-se-bridge", action="store_true", help="确认本次 bootstrap-openspec 来自用户显式 /se:bridge 命令。")
     args = parser.parse_args()
 
     workspace = Path(args.workspace).expanduser() if args.workspace else None
@@ -453,7 +469,7 @@ def main() -> None:
     elif args.command == "propose-openspec":
         command_propose_openspec(workspace, args.change_name)
     elif args.command == "bootstrap-openspec":
-        command_bootstrap_openspec(workspace)
+        command_bootstrap_openspec(workspace, explicit_se_bridge=args.explicit_se_bridge)
     elif args.command == "writeback-openspec":
         command_writeback_openspec(workspace)
     elif args.command == "prepare-archive-openspec":

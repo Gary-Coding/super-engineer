@@ -54,6 +54,7 @@ description: Mandatory for any user message that starts with `/se:` or asks to r
 - 如果发现当前 session 缺少标准 JSON 或 Markdown 产物，不得手工补文件；必须通过 `/se:plan`、`/se:review`、`/se:verify` 或重新创建标准 session 来恢复
 - 每次只能执行用户当前消息中明确请求的 `/se:*` 命令；“下一步建议”只能作为文字建议，绝不能自动执行下一步命令
 - `openspec` 模式下，`/se:bridge` 生成的桥接 todo 必须先经过人工审核；用户审核后直接发送 `/se:apply` 进入交付阶段
+- `openspec` 模式下，只有用户显式发送 `/se:bridge` 时才允许生成或重写 `todo_file`；`/se:propose`、`/se:init`、`/se:plan`、`/se:apply` 都严禁自动桥接
 - 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，不要假设固定文件名；如果用户没有特殊要求，推荐使用 `todo.md`
 - `manual` 模式下，计划、实现、审查后按门禁停留
 - `auto` 模式下，除非出现硬阻塞，否则连续推进
@@ -61,10 +62,12 @@ description: Mandatory for any user message that starts with `/se:` or asks to r
 - `/se:archive` 只能在 `archive_ready=true`、`merge_mode=safe_merge`、`spec_conflicts=[]` 时继续
 - 当前置条件不满足时，停止该命令并明确说明缺少什么、应该先执行哪个 `/se:*` 命令
 - `/se:propose` 必须显式携带 OpenSpec change 名称，例如 `/se:propose demand-addition-rate`；AI 不得根据需求标题或 `demand_name` 自行推导 change 名称
-- `/se:propose <change-name>` 应先执行 `python3 scripts/run-workflow.py propose-openspec <change-name>`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json`、`demand_file` 和 `reference_files` 生成或完善 OpenSpec artifacts
+- `/se:propose <change-name>` 应先执行 `python3 scripts/run-workflow.py route-se --command-text "/se:propose <change-name>"`，优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions；随后 AI 根据 `propose-input.json`、`demand_file` 和 `reference_files` 生成或完善 OpenSpec artifacts
+- `/se:propose` 执行全过程禁止调用 `bootstrap-openspec.py`、`run-workflow.py bootstrap-openspec`，禁止创建或修改 `workspace.yml.todo_file` 指向的文件；完成后 `se-state.phase` 必须是 `proposed`
 - `/se:propose` 完成后只能提示下一步 `/se:bridge`，禁止提示 `/se:apply`
 - `/se:propose` 的完成回复中禁止出现“确认无误后执行 `/se:apply`”“通过 `/se:apply` 进入实现阶段”等表达；如果需要提示后续，只能写“下一步：执行 `/se:bridge` 生成待审核 todo”
 - `/se:bridge` 完成后只能提示人工审核 todo，审核通过后发送 `/se:apply`；禁止自动执行 `/se:apply`
+- `/se:bridge` 必须通过 `python3 scripts/run-workflow.py route-se --command-text "/se:bridge"` 或带 `--explicit-se-bridge` 的受控入口执行；直接调用 `bootstrap-openspec` 且没有显式桥接标记时应视为错误流程
 - 在进入 `/se:apply` 前，如果人工审核发现需求或 todo 有偏差，允许重新执行 `/se:propose <change-name>` 修正当前 change，然后再次执行 `/se:bridge` 重建待审核 todo；AI 禁止手工同步 `tasks.md` 到 `todo.md`
 - `/se:bridge` 完成后禁止自动调用 plan、apply、start-implement、review、verify 或修改代码
 - `/se:apply` 必须通过标准脚本序列推进：必要时先 `python3 scripts/run-workflow.py plan`，然后 `start-implement`，代码实现完成后 `finish-implement`，`auto` 模式下继续 `review` 和 `verify`；禁止只手工写状态或只手工发送通知后宣布完成
@@ -106,6 +109,8 @@ description: Mandatory for any user message that starts with `/se:` or asks to r
 - AI 只能读取和校验 `workspace.yml`，禁止自动编辑、重写或格式化该文件；如果配置需要变更，必须停下并让用户处理
 - `todo_file`、`reference_files`、`code_path`、`output_dir` 可以使用相对路径或绝对路径；相对路径按当前工作空间根目录解析
 - `demand_file` 是可选原始需求输入，主要给 `/se:propose` 使用；如果配置了，`/se:propose` 必须优先读取它
+- `demand_file` 支持本地 Markdown 路径或飞书/Lark 云文档 URL；云文档 URL 必须通过官方 `lark-cli` 读取，禁止 AI 手工复制云文档内容
+- 当 `demand_file` 是飞书/Lark 云文档 URL 时，脚本会检查 `lark-cli` 是否可用；未安装时必须停止并提示用户执行 `npx @larksuite/cli@latest install`、`lark-cli config init --new`、`lark-cli auth login --recommend`
 - `reference_files` 是 `/se:propose`、`/se:plan`、review 的强上下文；如果配置了，`/se:propose` 必须读取真实存在的参考文件并写入 `propose-input.json`
 - `workspace.yml` 支持 `vars` 变量；路径字段可以使用 `${name}` 或 `${vars.name}` 引用变量，例如 `${demand_name}`
 - `/se:bridge` 支持相对路径、绝对路径、`${demand_name}` 变量和 `openspec.changes_dir`；AI 禁止声称桥接脚本要求绝对路径或必须显式配置 `openspec.change_dir`
@@ -211,15 +216,15 @@ todo 模式下如果 `current-session.json` 指向旧 `output_dir`，或当前 s
 - `todo`：沿用当前模式，直接读取 `todo_file`
 - `openspec`：从当前 active OpenSpec change 的 `tasks.md` 生成桥接 `todo_file`，并把 `proposal.md`、`design.md`、`specs/` 下的 markdown 自动并入参考上下文
 
-OpenSpec 模式可选显式执行：
+OpenSpec 模式底层脚本只允许在对应 `/se:*` 阶段由受控入口执行：
 
 - `python3 scripts/run-workflow.py propose-openspec`
-- `python3 scripts/run-workflow.py bootstrap-openspec`
+- `python3 scripts/run-workflow.py bootstrap-openspec --explicit-se-bridge`
 - `python3 scripts/run-workflow.py writeback-openspec`
 - `python3 scripts/run-workflow.py prepare-archive-openspec`
 - `python3 scripts/run-workflow.py archive-openspec`
 
-但正常情况下，`init` 和 `plan` 会自动完成桥接。
+`init` 和 `plan` 只校验已有桥接 todo，不能自动完成桥接。
 `review` 和 `verify` 完成后会自动把执行摘要回写到 `openspec.writeback_dir`。
 `archive-openspec` 只在 `prepare-archive-openspec` 产出的 `merge_mode=safe_merge` 时允许自动执行。
 

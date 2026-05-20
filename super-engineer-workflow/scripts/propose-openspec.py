@@ -5,13 +5,13 @@ import argparse
 from pathlib import Path
 
 from common import (
-    demand_path,
     existing_reference_files,
     load_workspace_config,
     openspec_change_dir,
     openspec_change_name,
     openspec_cli_available,
     openspec_writeback_dir,
+    read_demand_source,
     read_text,
     run_openspec_cli,
     select_openspec_change,
@@ -45,8 +45,12 @@ def main() -> None:
     change_name = openspec_change_name(config)
     change_dir = openspec_change_dir(config)
     writeback_dir = openspec_writeback_dir(config)
-    demand_file = demand_path(config)
-    demand_text = read_text(demand_file) if demand_file else ""
+    try:
+        demand_source = read_demand_source(config)
+    except RuntimeError as error:
+        raise SystemExit(str(error))
+    demand_file = str(demand_source.get("source", "")).strip()
+    demand_text = str(demand_source.get("content", "")).strip()
     reference_contexts = [
         {
             "path": item,
@@ -85,7 +89,9 @@ def main() -> None:
         "change_name": change_name,
         "change_dir": str(change_dir),
         "active_change_file": str(active_change_file),
-        "demand_file": str(demand_file) if demand_file else "",
+        "demand_file": demand_file,
+        "demand_source_type": demand_source.get("source_type", ""),
+        "demand_fetch_command": demand_source.get("command", []),
         "demand_text": demand_text,
         "reference_files": reference_contexts,
         "openspec_cli_available": openspec_cli_available(),
@@ -107,6 +113,8 @@ def main() -> None:
                 f"- change: {change_name}",
                 f"- change_dir: {change_dir}",
                 f"- demand_file: {demand_file or ''}",
+                f"- demand_source_type: {demand_source.get('source_type', '')}",
+                f"- demand_fetch_command: {' '.join(str(item) for item in demand_source.get('command', [])) if demand_source.get('command') else ''}",
                 f"- openspec_cli_available: {openspec_cli_available()}",
                 "",
                 "## Demand",
@@ -148,6 +156,7 @@ def main() -> None:
     print(f"change_dir={change_dir}")
     print(f"active_change_file={active_change_file}")
     print(f"demand_file={demand_file or ''}")
+    print(f"demand_source_type={demand_source.get('source_type', '')}")
     print(f"reference_files={len(reference_contexts)}")
     print(f"openspec_cli_available={str(openspec_cli_available()).lower()}")
     print(f"propose_input={writeback_dir / 'propose-input.json'}")

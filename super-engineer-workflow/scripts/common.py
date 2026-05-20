@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
+from urllib.parse import urlparse
 from urllib import request as urllib_request
 
 
@@ -218,6 +219,23 @@ def resolve_workspace_path(root: Path, value: Any) -> Path:
     return (root / path).resolve()
 
 
+def is_url(value: Any) -> bool:
+    parsed = urlparse(str(value).strip())
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
+def is_lark_doc_url(value: Any) -> bool:
+    text = str(value).strip()
+    if not is_url(text):
+        return False
+    parsed = urlparse(text)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    if not any(marker in host for marker in ("feishu.cn", "larksuite.com", "larksuite.cn")):
+        return False
+    return any(marker in path for marker in ("/doc", "/docx", "/wiki"))
+
+
 def normalize_verify_commands(raw: Any) -> dict[str, str]:
     if raw in ("", None):
         return {}
@@ -412,7 +430,17 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
 
     todo_file = resolve_workspace_path(root, config.get("todo_file", ""))
     demand_file_raw = config.get("demand_file", "")
-    demand_file = resolve_workspace_path(root, demand_file_raw) if demand_file_raw not in ("", None) else None
+    demand_source = str(demand_file_raw).strip() if demand_file_raw not in ("", None) else ""
+    demand_file = None
+    demand_source_type = ""
+    if demand_source:
+        if is_lark_doc_url(demand_source):
+            demand_source_type = "lark_doc"
+        elif is_url(demand_source):
+            raise ValueError("workspace.yml 中的 demand_file URL 目前只支持飞书/Lark 云文档链接。")
+        else:
+            demand_file = resolve_workspace_path(root, demand_source)
+            demand_source_type = "local"
 
     code_path = resolve_workspace_path(root, config.get("code_path", ""))
     if not code_path.exists():
@@ -431,7 +459,8 @@ def load_workspace_config(workspace: Path | None = None) -> dict[str, Any]:
         normalized_refs.append(str(path))
 
     config["todo_file"] = str(todo_file.resolve())
-    config["demand_file"] = str(demand_file.resolve()) if demand_file else ""
+    config["demand_file"] = demand_source if demand_source_type == "lark_doc" else (str(demand_file.resolve()) if demand_file else "")
+    config["demand_source_type"] = demand_source_type
     config["code_path"] = str(code_path.resolve())
     config["output_dir"] = str(output_dir.resolve())
     config["reference_files"] = normalized_refs
@@ -1221,7 +1250,130 @@ def openspec_root(config: dict[str, Any]) -> Path:
 
 def demand_path(config: dict[str, Any]) -> Path | None:
     path_text = str(config.get("demand_file", "")).strip()
-    return Path(path_text).resolve() if path_text else None
+    if not path_text or str(config.get("demand_source_type", "")).strip() == "lark_doc" or is_url(path_text):
+        return None
+    return Path(path_text).resolve()
+
+
+def lark_cli_available() -> bool:
+    return bool(shutil.which("lark-cli"))
+
+
+def lark_cli_install_message() -> str:
+    return "\n".join(
+        [
+            "检测到 demand_file 是飞书/Lark 云文档，但本机未安装官方 lark-cli。",
+            "请先安装并完成授权：",
+            "1. npx @larksuite/cli@latest install",
+            "2. lark-cli config init --new",
+            "3. lark-cli auth login --recommend",
+            "4. lark-cli auth status",
+            "安装和授权完成后重新执行 /se:propose <change-name>。",
+        ]
+    )
+
+
+def _extract_lark_cli_text(stdout: str) -> str:
+    text = stdout.strip()
+    if not text:
+        return ""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+
+    def pick(value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ("content", "markdown", "text", "body", "document", "doc"):
+                picked = pick(value.get(key))
+                if picked:
+                    return picked
+            for item in value.values():
+                picked = pick(item)
+                if picked:
+                    return picked
+        if isinstance(value, list):
+            parts = [pick(item) for item in value]
+            return "\n\n".join(item for item in parts if item)
+        return ""
+
+    return pick(parsed) or text
+
+
+def read_lark_doc_demand(config: dict[str, Any], demand_url: str) -> dict[str, Any]:
+    if not lark_cli_available():
+        raise RuntimeError(lark_cli_install_message())
+    commands = [
+        ["lark-cli", "docs", "+fetch", "--api-version", "v2", "--doc", demand_url, "--doc-format", "markdown", "--detail", "full"],
+        ["lark-cli", "docs", "+fetch", "--api-version", "v2", "--doc", demand_url, "--doc-format", "markdown"],
+        ["lark-cli", "docs", "+fetch", "--doc", demand_url, "--doc-format", "markdown"],
+        ["lark-cli", "docs", "+fetch", "--url", demand_url, "--doc-format", "markdown"],
+    ]
+    attempts: list[dict[str, Any]] = []
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command,
+                cwd=str(config.get("__workspace_root", os.getcwd())),
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=90,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(lark_cli_install_message())
+        except subprocess.TimeoutExpired:
+            attempts.append(
+                {
+                    "command": command,
+                    "returncode": "timeout",
+                    "stdout": "",
+                    "stderr": "lark-cli docs +fetch timeout",
+                }
+            )
+            continue
+        attempts.append(
+            {
+                "command": command,
+                "returncode": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+            }
+        )
+        if result.returncode == 0:
+            content = _extract_lark_cli_text(result.stdout)
+            if content:
+                return {
+                    "source_type": "lark_doc",
+                    "source": demand_url,
+                    "content": content,
+                    "command": command,
+                    "attempts": attempts,
+                }
+    last = attempts[-1] if attempts else {}
+    raise RuntimeError(
+        "读取飞书/Lark 云文档失败。请确认 lark-cli 已完成授权且当前账号有文档访问权限。\n"
+        "建议执行：lark-cli auth status；如未登录，执行：lark-cli auth login --recommend。\n"
+        f"最后一次错误：{str(last.get('stderr') or last.get('stdout') or '').strip()}"
+    )
+
+
+def read_demand_source(config: dict[str, Any]) -> dict[str, Any]:
+    source = str(config.get("demand_file", "")).strip()
+    if not source:
+        return {"source_type": "", "source": "", "content": "", "command": [], "attempts": []}
+    if str(config.get("demand_source_type", "")).strip() == "lark_doc" or is_lark_doc_url(source):
+        return read_lark_doc_demand(config, source)
+    path = Path(source)
+    return {
+        "source_type": "local",
+        "source": str(path.resolve()),
+        "content": read_text(path),
+        "command": [],
+        "attempts": [],
+    }
 
 
 def openspec_cli_available() -> bool:
@@ -1514,7 +1666,12 @@ def ensure_workflow_inputs(config: dict[str, Any], *, allow_bridge_write: bool =
         )
     tasks_text = read_text(tasks_file)
     existing = read_text(todo_file)
-    if existing.strip() and not allow_bridge_write:
+    if not allow_bridge_write:
+        if not existing.strip():
+            raise FileNotFoundError(
+                f"桥接 todo 文件不存在：{todo_file}。OpenSpec 模式下只有显式执行 /se:bridge "
+                "才允许从 tasks.md 生成 todo.md；/se:init、/se:propose、/se:plan、/se:apply 都不能自动生成桥接 todo。"
+            )
         result["bridge_source"] = str(tasks_file)
         result["todo_needs_edit"] = is_todo_template_placeholder(existing)
         bridge_context = build_openspec_bridge_context(config, tasks_text)

@@ -18,6 +18,7 @@ output_dir: output
 # vars:
 #   demand_name: 7-your-demand
 # demand_file: superengineer/${demand_name}/需求.md
+# demand_file 也可以配置为飞书/Lark 云文档 URL，需本机已安装并授权 lark-cli。
 # todo_file: superengineer/${demand_name}/todo.md
 # output_dir: superengineer/${demand_name}/output
 # openspec:

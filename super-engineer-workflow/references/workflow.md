@@ -91,6 +91,8 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 `demand_file` 是原始需求文件：
 
 - `openspec` 模式下，`/se:propose` 优先读取它生成或完善 change
+- 可以配置为本地 Markdown 路径，也可以配置为飞书/Lark 云文档 URL
+- 飞书/Lark 云文档 URL 通过官方 `lark-cli docs +fetch` 读取；未安装时按提示执行 `npx @larksuite/cli@latest install`、`lark-cli config init --new`、`lark-cli auth login --recommend`
 - `reference_files` 是技术参考资料，不应该用来猜测哪个文件是原始需求
 - `openspec` 模式下，`/se:propose` 必须读取真实存在的 `reference_files`，并把内容写入 `propose-input.json` / `propose-input.md`，作为生成 `proposal.md`、`design.md`、`tasks.md` 的上下文
 
@@ -164,7 +166,8 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 - `current-session.json` 只指向当前正在推进的会话
 - 后续 `start-implement`、`finish-implement`、`review`、`verify`、`status` 都基于当前会话执行
 - `plan` 会自动执行 `discover`，`finish-implement` 会自动执行 `self-check`
-- `workflow_source=openspec` 时，`init` / `plan` 会自动桥接 OpenSpec `tasks.md` 到 `todo_file`
+- `workflow_source=openspec` 时，只有用户显式执行 `/se:bridge` 才会桥接 OpenSpec `tasks.md` 到 `todo_file`
+- `workflow_source=openspec` 时，`init` / `plan` 只校验已有桥接 todo，不能自动创建或重写 `todo_file`
 - `workflow_source=openspec` 时，`propose-openspec` 优先调用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
 - `workflow_source=openspec` 时，`review` / `verify` 会自动把执行摘要写回 `openspec.writeback_dir`
 - OpenSpec 长期规格归档建议显式执行 `prepare-archive-openspec` 与 `archive-openspec`；归档检查会结合 OpenSpec CLI status 与 super-engineer 的 spec baseline 冲突检测

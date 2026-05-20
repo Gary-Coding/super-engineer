@@ -10,12 +10,18 @@ from common import ensure_workflow_inputs, load_workspace_config, todo_path, upd
 def main() -> None:
     parser = argparse.ArgumentParser(description="根据 OpenSpec change/tasks 生成桥接 todo 文件。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
+    parser.add_argument("--explicit-se-bridge", action="store_true", help="确认本次调用来自用户显式 /se:bridge 命令。")
     args = parser.parse_args()
 
     workspace = workspace_root(Path(args.workspace).expanduser() if args.workspace else None)
     config = load_workspace_config(workspace)
     if workflow_source(config) != "openspec":
         raise SystemExit("当前 workspace.yml 未启用 OpenSpec 模式，无需执行 bootstrap-openspec。")
+    if not args.explicit_se_bridge:
+        raise SystemExit(
+            "拒绝执行桥接：bootstrap-openspec 只能由用户显式 /se:bridge 触发。"
+            "如果当前命令是 /se:propose、/se:init、/se:plan 或 /se:apply，必须停止，不能生成 todo.md。"
+        )
     result = ensure_workflow_inputs(config, allow_bridge_write=True)
     update_se_state(
         config,

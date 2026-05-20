@@ -31,7 +31,10 @@ def main() -> None:
 
     ensure_runtime_dirs(config)
 
-    input_result = ensure_workflow_inputs(config)
+    try:
+        input_result = ensure_workflow_inputs(config)
+    except (FileNotFoundError, ValueError) as error:
+        raise SystemExit(str(error))
     todo_file = todo_path(config)
     print(f"workflow_source={workflow_source(config)}")
     print(f"todo_created={'true' if input_result.get('todo_created') else 'false'}")

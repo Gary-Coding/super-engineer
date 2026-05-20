@@ -170,6 +170,14 @@ openspec:
   changes_dir: ../openspec/changes
 ```
 
+`demand_file` 可以是本地 Markdown，也可以是飞书/Lark 云文档 URL。使用云文档时需要先安装并授权官方 CLI：
+
+```bash
+npx @larksuite/cli@latest install
+lark-cli config init --new
+lark-cli auth login --recommend
+```
+
 如果同一个工作空间经常切换需求，可以用 `vars` 避免重复修改路径：
 
 ```yaml
