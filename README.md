@@ -1,6 +1,6 @@
 # super-engineer
 
-`super-engineer` 是一个面向存量系统交付场景的 AI 工程工作流项目。
+`super-engineer` 是一个面向需求驱动开发的软件工程工作流 skill，适用于新系统开发和存量系统迭代。
 
 它的目标不是让 AI 零散地写代码，而是让 AI 围绕一次真实需求，按稳定阶段推进：
 
@@ -14,11 +14,14 @@
 
 ## 适用场景
 
-- 中大型存量系统
+- 新系统从 0 到 1 的需求交付
+- 中大型存量系统的长期需求迭代
 - 多服务或多仓库工程
 - 需要计划、审查、验证门禁
 - 希望沉淀可回看、可追踪、可归档的交付过程
 - 希望把 OpenSpec 和代码交付流程接起来
+
+相比快速原型或一次性 demo，它更适合需要规格、计划、实现、自查、审查、验证、归档闭环的工程场景。相比从零开始的新项目，它在存量系统、多服务、多仓库、长期需求迭代场景下优势更明显。
 
 ## 当前能力
 
@@ -89,6 +92,55 @@ OpenSpec 模式下，脚本会维护 `.super-engineer/se-state.json`。
 ## 用户如何开始
 
 先准备工作空间，再把命令发给 AI。
+
+如果通过 npm 使用，推荐入口是：
+
+```bash
+npx super-engineer-workflow init
+```
+
+也可以全局安装后使用：
+
+```bash
+npm install -g super-engineer-workflow
+se init
+```
+
+常用 CLI 命令：
+
+```bash
+se init      # 交互式安装 skill 并初始化工作区
+se doctor    # 检查本机环境和 workspace.yml
+se install   # 安装 skill 到 Codex / Claude
+se sync      # 强制同步最新 skill 到 Codex / Claude
+se migrate   # 补齐旧工作区缺失配置
+se version   # 查看版本
+```
+
+本地源码开发时，也可以直接使用引导脚本。默认是一步一步的交互式向导：
+
+```bash
+python3 scripts/se-setup.py
+```
+
+脚本会依次完成环境检查、安装目标选择、工作区选择、代码目录配置、需求目录配置、工作流模式选择、OpenSpec 初始化确认、快捷命令生成，并在执行前展示摘要。最终会创建 `workspace.yml`、`openspec/`、`superengineer/<demand_name>/需求.md`、`.claude/commands/se/*`，并可选安装 skill 到 Codex / Claude 本机目录。
+
+当选择 `openspec` 模式时，`se init` 默认会尝试在工作区根目录执行 `openspec init . --tools codex,claude`。如果本机未安装 OpenSpec CLI，会跳过并给出提示；如果你希望跳过该步骤，可以使用 `--skip-openspec-init`。
+
+如果需要非交互初始化：
+
+```bash
+python3 scripts/se-setup.py \
+  --yes \
+  --install both \
+  --workspace /path/to/ai-workspace \
+  --code-path ../code \
+  --demand-name 1-your-demand \
+  --source openspec \
+  --mode auto
+```
+
+npm 包入口由 `package.json` 的 `bin` 字段提供，`super-engineer` 和 `se` 都会转发到同一个 CLI。
 
 一个真实需求示例：
 

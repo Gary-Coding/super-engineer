@@ -1,0 +1,55 @@
+{
+  "name": "super-engineer-workflow",
+  "version": "0.1.2",
+  "description": "Super Engineer workflow skill and CLI for demand-driven AI delivery with OpenSpec bridge support.",
+  "license": "MIT",
+  "author": "Gary-Coding",
+  "homepage": "https://github.com/Gary-Coding/super-engineer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gary-Coding/super-engineer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Gary-Coding/super-engineer/issues"
+  },
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "super-engineer": "bin/super-engineer.js",
+    "se": "bin/super-engineer.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "!scripts/__pycache__/",
+    "!scripts/**/*.pyc",
+    "super-engineer-workflow/",
+    "!super-engineer-workflow/scripts/__pycache__/",
+    "!super-engineer-workflow/scripts/**/*.pyc",
+    "docs/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "setup": "python3 scripts/se-setup.py",
+    "check": "python3 -m py_compile scripts/se-cli.py scripts/se-setup.py scripts/se-smoke-test.py super-engineer-workflow/scripts/*.py",
+    "smoke": "python3 scripts/se-smoke-test.py",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": [
+    "ai",
+    "workflow",
+    "openspec",
+    "codex",
+    "claude",
+    "skill"
+  ]
+}
