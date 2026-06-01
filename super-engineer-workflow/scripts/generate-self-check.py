@@ -139,7 +139,7 @@ def main() -> None:
     workspace = workspace_root(Path(args.workspace).expanduser() if args.workspace else None)
     config = load_workspace_config(workspace)
     session_meta = current_session_meta(config)
-    plan = read_json(data_artifact_path(config, "plan.json", session_meta), {})
+    plan = read_json(data_artifact_path(config, "plan-summary.json", session_meta), {}) or read_json(data_artifact_path(config, "plan.json", session_meta), {})
 
     sections: list[dict] = []
     for codebase in planned_codebases(config, session_meta):

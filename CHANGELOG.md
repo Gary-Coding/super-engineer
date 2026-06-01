@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Review 阶段优先读取 `plan-summary.json`，仅在缺失时回退到 `plan.json`。
+- Self-check、verify、OpenSpec writeback 阶段优先读取轻量计划摘要，减少重复加载完整计划。
+- Review 阶段默认压缩过长 diff 摘要，避免对话和报告带入大量无效上下文。
+- Verify 阶段增加命令输出压缩工具，为长日志截断和摘要化提供统一入口。
+
 ## 0.1.3
 
 - 压缩 `SKILL.md` 为轻量入口，详细规则改为按需读取 references，降低每次 `/se:*` 固定上下文消耗。

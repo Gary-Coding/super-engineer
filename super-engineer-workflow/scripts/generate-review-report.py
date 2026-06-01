@@ -64,6 +64,22 @@ def diff_summary(workspace: Path) -> list[str]:
     return lines
 
 
+def compact_lines(lines: list[str], limit: int = 80) -> list[str]:
+    if len(lines) <= limit:
+        return lines
+    head = max(1, limit // 2)
+    tail = max(1, limit - head)
+    return lines[:head] + [f"... 已省略 {len(lines) - limit} 行，详见 git diff。"] + lines[-tail:]
+
+
+def read_plan_context(config: dict, session_meta: dict) -> dict:
+    summary = read_json(data_artifact_path(config, "plan-summary.json", session_meta), {})
+    if summary:
+        summary["compact"] = True
+        return summary
+    return read_json(data_artifact_path(config, "plan.json", session_meta), {})
+
+
 def find_tests(files: list[str]) -> list[str]:
     return [item for item in files if item.endswith("Test.java") or "/test/" in item]
 
@@ -217,7 +233,7 @@ def main() -> None:
     workspace = workspace_root(Path(args.workspace).expanduser() if args.workspace else None)
     config = load_workspace_config(workspace)
     session_meta = current_session_meta(config)
-    plan = read_json(data_artifact_path(config, "plan.json", session_meta), {})
+    plan = read_plan_context(config, session_meta)
     codebases = planned_codebases(config, session_meta)
     target_plans = plan.get("target_codebases", [])
     target_map = {str(item.get("path")): item for item in target_plans}
@@ -230,7 +246,7 @@ def main() -> None:
         plan_files = target_plan.get("impacted_files", [])
         if is_git_repo(codebase):
             changed = changed_files(codebase)
-            summary = diff_summary(codebase)
+            summary = compact_lines(diff_summary(codebase))
             repo_mode = "git"
         else:
             changed = plan_files

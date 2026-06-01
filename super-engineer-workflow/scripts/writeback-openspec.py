@@ -223,6 +223,14 @@ def build_markdown(payload: dict) -> str:
     return "\n".join(lines)
 
 
+def read_plan_context(config: dict, session_meta: dict) -> dict:
+    summary = read_json(data_artifact_path(config, "plan-summary.json", session_meta), {})
+    if summary:
+        summary["compact"] = True
+        return summary
+    return read_json(data_artifact_path(config, "plan.json", session_meta), {})
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="把当前会话执行结果回写到 OpenSpec change 目录。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
@@ -234,7 +242,7 @@ def main() -> None:
         raise SystemExit("当前 workspace.yml 未启用 OpenSpec 模式，无需执行 writeback-openspec。")
 
     session_meta = current_session_meta(config)
-    plan = read_json(data_artifact_path(config, "plan.json", session_meta), {})
+    plan = read_plan_context(config, session_meta)
     review = read_json(data_artifact_path(config, "review.json", session_meta), {})
     verify = read_json(data_artifact_path(config, "verify.json", session_meta), {})
     status = read_json(data_artifact_path(config, "status.json", session_meta), {})

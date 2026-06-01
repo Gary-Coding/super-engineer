@@ -28,6 +28,29 @@ from common import (
     workspace_root,
 )
 
+
+MAX_VERIFY_LOG_CHARS = 12000
+
+
+def compact_command_output(text: str, max_chars: int = MAX_VERIFY_LOG_CHARS) -> str:
+    if len(text) <= max_chars:
+        return text
+    head = max_chars // 2
+    tail = max_chars - head
+    omitted = len(text) - max_chars
+    return text[:head].rstrip() + f"\n\n...[已省略 {omitted} 字符]...\n\n" + text[-tail:].lstrip()
+
+
+def compact_command_records(value):
+    if isinstance(value, dict):
+        return {
+            key: compact_command_output(item) if key in ("stdout", "stderr", "output", "logs") and isinstance(item, str) else compact_command_records(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [compact_command_records(item) for item in value]
+    return value
+
 VERIFY_BLOCKERS = {"未识别到验证命令", "验证失败", "验证执行超时"}
 
 
@@ -248,7 +271,7 @@ def main() -> None:
     workspace = workspace_root(Path(args.workspace).expanduser() if args.workspace else None)
     config = load_workspace_config(workspace)
     session_meta = current_session_meta(config)
-    plan = read_json(data_artifact_path(config, "plan.json", session_meta), {})
+    plan = read_json(data_artifact_path(config, "plan-summary.json", session_meta), {}) or read_json(data_artifact_path(config, "plan.json", session_meta), {})
     status_path = data_artifact_path(config, "status.json", session_meta)
     existing_status = ensure_status(config, session_meta, read_json(status_path, {}))
     if (
@@ -319,8 +342,8 @@ def main() -> None:
                     "result": repo_result,
                     "exit_code": str(result.returncode),
                     "duration": repo_duration,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
+                    "stdout": compact_command_output(result.stdout),
+                    "stderr": compact_command_output(result.stderr),
                 }
             )
             if repo_result != "通过":
@@ -363,8 +386,8 @@ def main() -> None:
                 "result": "超时",
                 "exit_code": "timeout",
                 "duration": duration,
-                "stdout": error.stdout or "",
-                "stderr": error.stderr or "",
+                "stdout": compact_command_output(error.stdout or ""),
+                "stderr": compact_command_output(error.stderr or ""),
             }
         )
         status_for_duration = ensure_status(config, session_meta, read_json(status_path, {}))
