@@ -12,9 +12,9 @@ from common import (
     openspec_cli_available,
     openspec_writeback_dir,
     read_demand_source,
-    read_text,
     run_openspec_cli,
     select_openspec_change,
+    summarize_markdown_file,
     update_se_state,
     validate_openspec_change_name,
     workflow_source,
@@ -51,11 +51,9 @@ def main() -> None:
         raise SystemExit(str(error))
     demand_file = str(demand_source.get("source", "")).strip()
     demand_text = str(demand_source.get("content", "")).strip()
+    demand_keywords = [item for item in [change_name, *change_name.replace("-", " ").split()] if item]
     reference_contexts = [
-        {
-            "path": item,
-            "content": read_text(Path(item)),
-        }
+        summarize_markdown_file(Path(item), keywords=demand_keywords)
         for item in existing_reference_files(config)
     ]
 
@@ -92,15 +90,16 @@ def main() -> None:
         "demand_file": demand_file,
         "demand_source_type": demand_source.get("source_type", ""),
         "demand_fetch_command": demand_source.get("command", []),
-        "demand_text": demand_text,
+        "demand_text_available_at": demand_file,
+        "demand_excerpt": demand_text[:12000] + ("\n\n...[已摘要，按需读取 demand_file 全文]..." if len(demand_text) > 12000 else ""),
         "reference_files": reference_contexts,
         "openspec_cli_available": openspec_cli_available(),
         "commands": commands,
-        "next_action": "Use demand_text, reference_files, and OpenSpec instructions to create or update proposal.md, design.md, tasks.md, and specs/.",
+        "next_action": "Use demand_excerpt, reference file summaries, and OpenSpec instructions to create or update proposal.md, design.md, tasks.md, and specs/. Read full source files only when necessary.",
         "workflow_phase_after_completion": "proposed",
         "allowed_next_after_completion": ["/se:bridge"],
         "forbidden_next_after_completion": ["/se:plan", "/se:apply"],
-        "final_reply_constraint": "代码暂未修改。下一步只能执行 /se:bridge，把当前 OpenSpec tasks.md 桥接为待审核 todo.md。",
+        "final_reply_constraint": "代码未修改。下一步只能执行 /se:bridge。",
     }
     write_managed_json(config, writeback_dir / "propose-input.json", payload)
     write_managed_text(
@@ -119,7 +118,7 @@ def main() -> None:
                 "",
                 "## Demand",
                 "",
-                demand_text or "未配置或未找到 demand_file。",
+                payload["demand_excerpt"] or "未配置或未找到 demand_file。",
                 "",
                 "## Reference Files",
                 "",
@@ -129,7 +128,17 @@ def main() -> None:
                             [
                                 f"### {item['path']}",
                                 "",
-                                item["content"] or "文件为空或无法读取。",
+                                f"- bytes: {item.get('bytes', 0)}",
+                                f"- sha256: {item.get('sha256', '')}",
+                                f"- truncated: {item.get('truncated', False)}",
+                                "",
+                                "#### Headings",
+                                "",
+                                "\n".join(f"- {heading}" for heading in item.get("headings", [])) or "暂无标题",
+                                "",
+                                "#### Excerpt",
+                                "",
+                                item.get("excerpt", "") or "文件为空或无法读取。",
                             ]
                         )
                         for item in reference_contexts
@@ -163,7 +172,7 @@ def main() -> None:
     print("workflow_phase_after_completion=proposed")
     print("allowed_next_after_completion=/se:bridge")
     print("forbidden_next_after_completion=/se:plan,/se:apply")
-    print("final_reply_must=代码暂未修改。下一步只能执行 /se:bridge，把当前 OpenSpec tasks.md 桥接为待审核 todo.md。")
+    print("final_reply_must=代码未修改。下一步只能执行 /se:bridge。")
 
 
 if __name__ == "__main__":

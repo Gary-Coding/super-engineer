@@ -266,6 +266,29 @@ def build_plan_markdown(plan: dict) -> str:
     return "\n".join(lines)
 
 
+def build_plan_summary(plan: dict) -> dict[str, object]:
+    return {
+        "session_id": plan.get("session_id", ""),
+        "source": "run-workflow.py plan-summary",
+        "schema_version": 1,
+        "requirement_summary": plan.get("requirement_summary", ""),
+        "target_codebases": [
+            {
+                "name": item.get("name", ""),
+                "path": item.get("path", ""),
+                "verify_command": (item.get("detected_project") or {}).get("verify_command", ""),
+            }
+            for item in plan.get("target_codebases", [])
+        ],
+        "impacted_files": plan.get("impacted_files", [])[:80],
+        "change_steps": plan.get("change_steps", [])[:20],
+        "acceptance_criteria": plan.get("acceptance_criteria", [])[:40],
+        "test_plan": plan.get("test_plan", [])[:20],
+        "risks": plan.get("risks", [])[:10],
+        "unknowns": plan.get("unknowns", [])[:10],
+    }
+
+
 def collect_target_plan_data(config: dict, codebases: list[Path]) -> tuple[list[dict], list[str], list[str]]:
     targets: list[dict] = []
     all_impacted_files: list[str] = []
@@ -404,6 +427,7 @@ def main() -> None:
     }
 
     write_managed_json(config, data_artifact_path(config, "plan.json", session_meta), plan)
+    write_managed_json(config, data_artifact_path(config, "plan-summary.json", session_meta), build_plan_summary(plan))
     write_managed_text(config, report_artifact_path(config, "plan.md", session_meta), build_plan_markdown(plan) + "\n")
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3
+
+- 压缩 `SKILL.md` 为轻量入口，详细规则改为按需读取 references，降低每次 `/se:*` 固定上下文消耗。
+- 快捷命令模板改为极简形式，减少 Claude / Codex slash command 触发时的重复提示词。
+- `/se:propose` 不再把 `reference_files` 全文复制进 `propose-input.json` / `propose-input.md`，改为路径、sha256、标题和摘要片段。
+- 大型 Markdown 参考文档自动摘要，保留按需读取全文能力。
+- OpenSpec bridge context 增加 proposal/design 摘要片段，避免后续阶段重复读取全文。
+- `plan` 阶段新增 `plan-summary.json`，供后续阶段优先读取轻量计划摘要。
+- 收紧脚本最终回复约束文案，默认输出更 compact。
+
 ## 0.1.2
 
 - `se init` 在 `openspec` 模式下默认尝试执行 `openspec init . --tools codex,claude`。

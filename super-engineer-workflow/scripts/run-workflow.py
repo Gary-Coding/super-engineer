@@ -40,19 +40,19 @@ SE_ROUTE_REPLY_CONSTRAINTS: dict[str, dict[str, str]] = {
         "phase": "proposed",
         "allowed_next": "/se:bridge",
         "forbidden_next": "/se:plan,/se:apply",
-        "final_reply_must": "代码暂未修改。下一步只能执行 /se:bridge，把当前 OpenSpec tasks.md 桥接为待审核 todo.md。",
+        "final_reply_must": "代码未修改。下一步只能执行 /se:bridge。",
     },
     "/se:bridge": {
         "phase": "bridged",
         "allowed_next": "人工审核 todo.md 后 /se:apply",
         "forbidden_next": "自动执行 /se:plan,自动执行 /se:apply,代码实现",
-        "final_reply_must": "桥接 todo 已生成。请先人工审核 todo.md，审核通过后再发送 /se:apply。",
+        "final_reply_must": "桥接 todo 已生成。请审核 todo.md，审核通过后发送 /se:apply。",
     },
     "/se:plan": {
         "phase": "planned",
         "allowed_next": "/se:apply",
         "forbidden_next": "代码实现,review,verify",
-        "final_reply_must": "计划已生成。下一步只有在确认计划后执行 /se:apply。",
+        "final_reply_must": "计划已生成。下一步执行 /se:apply。",
     },
 }
 

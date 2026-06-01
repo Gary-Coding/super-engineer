@@ -343,126 +343,55 @@ description: Super Engineer：生成或完善 OpenSpec change
 argument-hint: <change-name>
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-本命令接收到的 OpenSpec change 名称参数是：`$ARGUMENTS`。
-
-如果 `$ARGUMENTS` 为空，先不要执行 `/se:propose`，请直接询问用户：
-
-```text
-请提供 OpenSpec change 名称，例如：demand-to-venus-api。
-```
-
-如果 `$ARGUMENTS` 不为空，请执行：
-
-```text
-python3 ~/.claude/skills/super-engineer-workflow/scripts/run-workflow.py route-se --command-text "/se:propose $ARGUMENTS"
-```
-
-请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
-本命令只能生成或完善 OpenSpec change 文档，严禁执行 /se:bridge，严禁生成或修改 todo.md。
-不要改代码。
-过程中请使用中文。
+请使用 super-engineer-workflow skill 执行：`/se:propose $ARGUMENTS`。
+如果 `$ARGUMENTS` 为空，请先询问用户提供 OpenSpec change 名称。
 """,
     "propose-fix.md": """---
 description: Super Engineer：需求补充后修正当前 OpenSpec change
 argument-hint: <change-name>
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-本命令接收到的 OpenSpec change 名称参数是：`$ARGUMENTS`。
-
-如果 `$ARGUMENTS` 为空，先不要执行 `/se:propose`，请直接询问用户：
-
-```text
-请提供要修正的 OpenSpec change 名称，例如：demand-to-venus-api。
-```
-
-如果 `$ARGUMENTS` 不为空，请执行：
-
-```text
-/se:propose $ARGUMENTS
-```
-
-当前需求有补充，请基于修改后的 demand_file 修正当前 OpenSpec change。
-不要创建新的 change。
-不要改代码。
-过程中请使用中文。
+请使用 super-engineer-workflow skill 执行：`/se:propose $ARGUMENTS`。
+当前需求有补充，请修正当前 OpenSpec change；不要创建新的 change，不要改代码。
 """,
     "bridge.md": """---
 description: Super Engineer：生成桥接 todo
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-请执行：
-
-```text
-python3 ~/.claude/skills/super-engineer-workflow/scripts/run-workflow.py route-se --command-text "/se:bridge"
-```
-
-针对当前 OpenSpec change 生成桥接 todo，并总结待审核项。
-不要改代码，不要进入实现。
-过程中请使用中文。
+请使用 super-engineer-workflow skill 执行：`/se:bridge`。
+生成桥接 todo 并总结待审核项，不要改代码，不要进入实现。
 """,
     "plan.md": """---
 description: Super Engineer：只生成实施计划
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-/se:plan
-
-基于已审核的 todo.md 生成计划。
-先不要改代码，只总结目标仓库、影响范围、验收标准和主要风险。
-过程中请使用中文。
+请使用 super-engineer-workflow skill 执行：`/se:plan`。
+只生成计划，不要改代码。
 """,
     "apply.md": """---
 description: Super Engineer：审核 todo 后进入交付阶段
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-/se:apply
-
+请使用 super-engineer-workflow skill 执行：`/se:apply`。
 我已审核当前桥接 todo，可以进入交付阶段。
-使用当前工作空间。
-如果没有硬阻塞，自动推进到实现、自查、审查和验证。
-过程中请使用中文。
 """,
     "archive-check.md": """---
 description: Super Engineer：检查 OpenSpec 归档条件
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-/se:archive-check
-
-检查当前 OpenSpec change 是否满足归档条件。
-过程中请使用中文。
+请使用 super-engineer-workflow skill 执行：`/se:archive-check`。
 """,
     "archive.md": """---
 description: Super Engineer：归档 OpenSpec change
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-/se:archive
-
-仅在 archive_ready=true、merge_mode=safe_merge、spec_conflicts 为空时执行归档。
-过程中请使用中文。
+请使用 super-engineer-workflow skill 执行：`/se:archive`。
 """,
     "status.md": """---
 description: Super Engineer：查看当前工作流状态
 ---
 
-请使用 super-engineer-workflow skill 处理下面的 /se:* 工作流命令。
-
-/se:status
-
-请检查当前工作流状态，并说明当前阶段、允许的下一步和阻塞项。
-过程中请使用中文。
+请使用 super-engineer-workflow skill 执行：`/se:status`。
 """,
 }
 
