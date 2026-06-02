@@ -665,6 +665,47 @@ def current_session_meta(config: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def current_session_status(config: dict[str, Any], session_meta: dict[str, Any] | None = None) -> dict[str, Any]:
+    meta = session_meta or current_session_meta(config)
+    status = read_json(data_artifact_path(config, "status.json", meta), {})
+    return status if isinstance(status, dict) else {}
+
+
+def active_session_for_plan(config: dict[str, Any]) -> dict[str, Any] | None:
+    if current_session_is_stale(config):
+        return None
+    try:
+        session_meta = current_session_meta(config)
+    except FileNotFoundError:
+        return None
+    if not data_artifact_path(config, "plan.json", session_meta).exists():
+        return None
+    status = current_session_status(config, session_meta)
+    status_phase = str(status.get("phase", "") or "").strip()
+    if status_phase in ("done", "archived", "blocked"):
+        return None
+    return {
+        "session": session_meta,
+        "status": status,
+        "phase": status_phase or "plan",
+    }
+
+
+def ensure_plan_can_run(config: dict[str, Any]) -> dict[str, Any] | None:
+    active = active_session_for_plan(config)
+    if not active:
+        return None
+    phase = str(active.get("phase", "")).strip()
+    session = active.get("session", {})
+    if phase in ("plan", "wait_confirm_plan"):
+        return active
+    raise RuntimeError(
+        f"当前已有活跃 session 正在交付中，禁止重新执行 /se:plan："
+        f"session_id={session.get('session_id', '')}, phase={phase}。"
+        "请继续当前 /se:apply 链路，不要创建新的 plan/session。"
+    )
+
+
 def data_artifact_path(config: dict[str, Any], name: str, session_meta: dict[str, Any] | None = None) -> Path:
     meta = _normalize_session_meta(config, session_meta or current_session_meta(config))
     return Path(meta["data_dir"]) / name
@@ -1016,6 +1057,8 @@ def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any
         elif run_command in ("plan", "apply"):
             if not todo_path(config).exists():
                 errors.append("缺少 todo_file，请先执行 /se:init 或补充 todo.md。")
+            if run_command == "plan" and phase in ("implementing", "self_checked", "reviewed"):
+                errors.append("当前已有活跃 session 正在交付中，不能重新执行 /se:plan。请继续当前 /se:apply、/se:review 或 /se:verify。")
         elif run_command == "start-implement":
             if phase not in ("planned", "implementing", "blocked"):
                 errors.append("当前状态不允许进入实现，请先执行 /se:plan。")
@@ -1065,7 +1108,16 @@ def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any
         for key in ("proposal", "design", "tasks"):
             if not _se_state_artifact_exists(str(artifacts.get(key, ""))):
                 errors.append(f"缺少 OpenSpec 产物：{key}")
-    elif se_command in ("/se:plan", "/se:apply"):
+    elif se_command == "/se:plan":
+        if phase not in ("bridged", "planned", "blocked") and se_command not in allowed_next:
+            errors.append("当前状态不允许重新计划，请先完成 /se:bridge，或继续当前活跃交付会话。")
+        if phase in ("implementing", "self_checked", "reviewed", "verified"):
+            errors.append("当前已有活跃 session 正在交付中，不能重新执行 /se:plan。请继续当前 /se:apply、/se:review 或 /se:verify。")
+        if phase == "proposed":
+            errors.append("/se:propose 后不能直接进入交付，必须先执行 /se:bridge。")
+        if not _se_state_artifact_exists(str(artifacts.get("todo", ""))):
+            errors.append("缺少桥接 todo.md，请先执行 /se:bridge。")
+    elif se_command == "/se:apply":
         if phase not in ("bridged", "planned", "implementing", "reviewed", "blocked") and se_command not in allowed_next:
             errors.append("当前状态不允许进入交付，请先完成 /se:bridge 并人工审核 todo.md。")
         if phase == "proposed":

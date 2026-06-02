@@ -64,6 +64,18 @@ def test_openspec_state_and_bridge(root: Path) -> None:
     demand_dir = workspace / "superengineer" / "8-demo"
     demand_dir.mkdir(parents=True)
     code.mkdir(parents=True)
+    (code / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "demo-service",
+                "version": "1.0.0",
+                "scripts": {"test": "node -e \"process.exit(0)\""},
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     (workspace / "docs").mkdir(parents=True)
     (workspace / "openspec" / "changes").mkdir(parents=True)
     (workspace / "openspec" / "specs").mkdir(parents=True)
@@ -151,6 +163,70 @@ def test_openspec_state_and_bridge(root: Path) -> None:
     todo = read_text(workspace / "superengineer" / "8-demo" / "todo.md")
     if "demo-change" not in todo or "demo-service" not in todo:
         raise AssertionError("bridged todo.md missing expected OpenSpec context")
+
+    first_plan = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:plan",
+        ]
+    )
+    if "session_action=created" not in first_plan:
+        raise AssertionError("first /se:plan should create a session")
+    first_session = read_json(workspace / ".super-engineer" / "current-session.json")
+    first_session_id = first_session["session_id"]
+
+    second_plan = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:plan",
+        ]
+    )
+    second_session = read_json(workspace / ".super-engineer" / "current-session.json")
+    if "session_action=reused" not in second_plan or second_session["session_id"] != first_session_id:
+        raise AssertionError("second /se:plan should reuse the existing planning session")
+    if len(list((workspace / ".super-engineer" / "sessions").iterdir())) != 1:
+        raise AssertionError("repeated /se:plan created an extra session")
+
+    apply_output = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:apply",
+        ]
+    )
+    if "apply_phase=implementing" not in apply_output:
+        raise AssertionError("/se:apply should enter implementing after planned session")
+    blocked_plan = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:plan",
+        ],
+        check=False,
+    )
+    final_session = read_json(workspace / ".super-engineer" / "current-session.json")
+    if blocked_plan.returncode == 0 or "不能重新执行 /se:plan" not in blocked_plan.output:
+        raise AssertionError("/se:plan during active delivery should be rejected")
+    if final_session["session_id"] != first_session_id or len(list((workspace / ".super-engineer" / "sessions").iterdir())) != 1:
+        raise AssertionError("rejected /se:plan should not create or switch sessions")
 
 
 def test_todo_auto_session_and_verify_compaction(root: Path) -> None:

@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.5
 
+- 修复重复执行 `/se:plan` 会创建多个 session 的问题：计划阶段复用当前 session，交付中重复 plan 会被拒绝。
 - 增加 E2E 测试，覆盖模板 CLI、OpenSpec 状态机与桥接、todo auto 会话、verify 长日志截断。
 - 增加 `se templates`、`se template show`、`se template copy`，支持复制内置 `workspace.yml` 模板。
 - 增加 OpenSpec、todo、Java 微服务、前端、多仓库等工作区模板。

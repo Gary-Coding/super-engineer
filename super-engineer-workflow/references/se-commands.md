@@ -319,6 +319,8 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 内部动作：
 
 - 执行 `python3 scripts/run-workflow.py plan`
+- 如果当前 session 已有标准 `plan.json` 且仍停留在计划确认阶段，脚本必须复用当前 session
+- 如果当前 session 已进入实现、自查、审查或验证阶段，脚本必须拒绝重复 `/se:plan`，不能创建第二个 session
 
 完成后汇报：
 
@@ -350,7 +352,8 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 
 内部动作：
 
-- 如果没有当前 session，先执行 `python3 scripts/run-workflow.py plan`
+- 如果没有当前 session、当前 session 失效，或当前 session 缺少标准 `plan.json`，先执行 `python3 scripts/run-workflow.py plan`
+- 如果当前 session 已有标准 `plan.json` 且未完成，必须复用当前 session
 - 执行 `python3 scripts/run-workflow.py start-implement`
 - 按当前 `plan.json` 实现代码
 - 执行 `python3 scripts/run-workflow.py finish-implement`
@@ -363,6 +366,7 @@ AI 在 `/se:bridge` 完成后必须停止，只能提示用户审核 `todo.md`�
 - `todo` 模式下也必须通过当前 session 的 `status.json`、`todo-state.json` 和标准产物来源校验，不能复用旧需求 session
 - `todo` 模式的状态不能写入 OpenSpec 专用 `se-state.json`
 - `todo` 模式下如果 `current-session.json` 指向旧 `output_dir`，`/se:apply` 必须重新创建标准 session
+- AI 不得在 `/se:apply` 链路中额外手工执行第二次 `/se:plan`；脚本检测到活跃交付 session 时必须拒绝重复计划
 - AI 只能在 `start-implement` 和 `finish-implement` 之间修改业务代码
 - AI 不得直接写 `.super-engineer` 下的状态 JSON
 - AI 不得直接写 output 下的标准 Markdown 报告

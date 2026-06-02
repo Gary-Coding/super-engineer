@@ -11,6 +11,7 @@ from common import (
     current_session_is_stale,
     current_session_meta,
     data_artifact_path,
+    ensure_plan_can_run,
     ensure_status,
     load_workspace_config,
     now_iso,
@@ -287,9 +288,22 @@ def command_archive_openspec(workspace: Path | None) -> None:
 def command_plan(workspace: Path | None) -> None:
     config = load_workspace_config(workspace)
     require_se_state(config, "plan")
+    try:
+        active = ensure_plan_can_run(config)
+    except RuntimeError as error:
+        raise SystemExit(str(error))
+    if active:
+        session = active.get("session", {})
+        print("session_action=reused")
+        print(f"session_id={session.get('session_id', '')}")
+        print(f"phase={active.get('phase', '')}")
+        print("next_action=当前计划已存在，继续执行 /se:apply。")
+        return
     command_init(workspace)
     config = load_workspace_config(workspace)
-    create_session(config)
+    session_meta = create_session(config)
+    print("session_action=created")
+    print(f"session_id={session_meta.get('session_id', '')}")
     command_discover(workspace)
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("generate-smart-plan.py", args)

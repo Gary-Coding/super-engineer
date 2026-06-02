@@ -161,7 +161,9 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 - `/se:verify` 通过后状态为 `verified`，只允许 `/se:archive-check`
 - `/se:archive-check` 通过后状态为 `archive_ready`，只允许 `/se:archive`
 - 所有阶段推进必须先通过 `run-workflow.py validate-state <command>` 等价校验，不能只依赖 AI 回复
-- 每次执行 `plan` 都必须创建新的 `session_id`
+- `plan` 只有在没有有效计划会话、当前会话已完成/归档/阻塞，或当前会话失效时才创建新的 `session_id`
+- 如果当前 session 已有 `plan.json` 且仍停留在计划确认阶段，重复执行 `plan` 必须复用当前 session，不能创建新 session
+- 如果当前 session 已进入 `implement`、`self_check`、`review`、`verify` 等交付阶段，重复执行 `plan` 必须被脚本拒绝
 - 新会话不能覆盖历史会话目录
 - `current-session.json` 只指向当前正在推进的会话
 - 后续 `start-implement`、`finish-implement`、`review`、`verify`、`status` 都基于当前会话执行
