@@ -14,6 +14,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = REPO_ROOT / "super-engineer-workflow"
 PACKAGE_JSON = REPO_ROOT / "package.json"
+TEMPLATE_DIR = REPO_ROOT / "templates" / "workspaces"
+
+
+WORKSPACE_TEMPLATES: dict[str, str] = {
+    "openspec-auto": "OpenSpec 规格先行 + 自动交付，推荐用于需求迭代主流程。",
+    "openspec-manual": "OpenSpec 规格先行 + 分阶段人工确认，推荐用于高风险变更。",
+    "todo-auto": "todo.md 直接驱动 + 自动交付，推荐用于小需求或已有明确任务清单。",
+    "todo-manual": "todo.md 直接驱动 + 分阶段人工确认，推荐用于首次接入或新手练习。",
+    "java-microservice": "Java / Spring 微服务模板，内置 Maven 验证命令示例。",
+    "frontend": "Vue / React 前端模板，内置 pnpm/npm 验证命令示例。",
+    "multi-repo": "多仓库聚合目录模板，适用于中台或跨服务需求。",
+}
 
 
 def main() -> None:
@@ -49,6 +61,19 @@ def main() -> None:
     migrate_parser.add_argument("--workspace", default=".", help="工作区目录，默认当前目录。")
     migrate_parser.add_argument("--dry-run", action="store_true", help="只展示计划，不写入文件。")
 
+    subparsers.add_parser("templates", help="列出内置 workspace.yml 模板。")
+
+    template_parser = subparsers.add_parser("template", help="查看或复制内置 workspace.yml 模板。")
+    template_subparsers = template_parser.add_subparsers(dest="template_action")
+    template_show = template_subparsers.add_parser("show", help="打印指定模板内容。")
+    template_show.add_argument("name", choices=sorted(WORKSPACE_TEMPLATES))
+    template_copy = template_subparsers.add_parser("copy", help="复制指定模板到工作区 workspace.yml。")
+    template_copy.add_argument("name", choices=sorted(WORKSPACE_TEMPLATES))
+    template_copy.add_argument("--workspace", default=".", help="工作区目录，默认当前目录。")
+    template_copy.add_argument("--demand-name", default="1-your-demand", help="写入 vars.demand_name 的需求目录名。")
+    template_copy.add_argument("--code-path", default="../code", help="写入 code_path 的代码目录。")
+    template_copy.add_argument("--force", action="store_true", help="允许覆盖已有 workspace.yml。")
+
     subparsers.add_parser("version", help="显示版本号。")
 
     args = parser.parse_args()
@@ -67,6 +92,24 @@ def main() -> None:
     if args.command == "migrate":
         exit_code = migrate(Path(args.workspace).expanduser().resolve(), dry_run=args.dry_run)
         raise SystemExit(exit_code)
+    if args.command == "templates":
+        list_templates()
+        return
+    if args.command == "template":
+        if args.template_action == "show":
+            show_template(args.name)
+            return
+        if args.template_action == "copy":
+            copy_template(
+                args.name,
+                Path(args.workspace).expanduser().resolve(),
+                demand_name=args.demand_name,
+                code_path=args.code_path,
+                force=args.force,
+            )
+            return
+        template_parser.print_help()
+        return
 
     parser.print_help()
 
@@ -117,6 +160,40 @@ def install_skill(target: Path, force: bool) -> None:
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     print(f"✓ 已同步 skill: {target}")
+
+
+def template_path(name: str) -> Path:
+    path = TEMPLATE_DIR / f"{name}.yml"
+    if not path.exists():
+        raise SystemExit(f"模板不存在：{name}")
+    return path
+
+
+def list_templates() -> None:
+    print("内置 workspace.yml 模板：")
+    for name in sorted(WORKSPACE_TEMPLATES):
+        marker = "✓" if template_path(name).exists() else "!"
+        print(f"{marker} {name}: {WORKSPACE_TEMPLATES[name]}")
+
+
+def render_template(name: str, demand_name: str, code_path: str) -> str:
+    text = template_path(name).read_text(encoding="utf-8")
+    return text.replace("__DEMAND_NAME__", demand_name).replace("__CODE_PATH__", code_path)
+
+
+def show_template(name: str) -> None:
+    print(render_template(name, demand_name="1-your-demand", code_path="../code"))
+
+
+def copy_template(name: str, workspace: Path, demand_name: str, code_path: str, force: bool) -> None:
+    workspace.mkdir(parents=True, exist_ok=True)
+    target = workspace / "workspace.yml"
+    if target.exists() and not force:
+        raise SystemExit(f"workspace.yml 已存在：{target}。如需覆盖请加 --force。")
+    target.write_text(render_template(name, demand_name=demand_name, code_path=code_path), encoding="utf-8")
+    (workspace / "docs").mkdir(parents=True, exist_ok=True)
+    (workspace / "superengineer" / demand_name).mkdir(parents=True, exist_ok=True)
+    print(f"✓ 已写入模板：{target}")
 
 
 def doctor(workspace: Path, output_json: bool) -> int:

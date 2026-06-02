@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- 增加 E2E 测试，覆盖模板 CLI、OpenSpec 状态机与桥接、todo auto 会话、verify 长日志截断。
+- 增加 `se templates`、`se template show`、`se template copy`，支持复制内置 `workspace.yml` 模板。
+- 增加 OpenSpec、todo、Java 微服务、前端、多仓库等工作区模板。
+- 增加模板使用指南，并在 README 和快速初始化文档中补充模板入口。
+
 ## 0.1.4
 
 - Review 阶段优先读取 `plan-summary.json`，仅在缺失时回退到 `plan.json`。

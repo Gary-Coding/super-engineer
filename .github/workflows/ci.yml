@@ -27,6 +27,7 @@ jobs:
           python-version: "3.11"
       - run: npm run check
       - run: npm run smoke
+      - run: npm run e2e
       - run: node bin/super-engineer.js --help
       - run: node bin/super-engineer.js version
       - run: npm run pack:check

@@ -31,6 +31,7 @@
     "super-engineer-workflow/",
     "!super-engineer-workflow/scripts/__pycache__/",
     "!super-engineer-workflow/scripts/**/*.pyc",
+    "templates/",
     "docs/",
     "README.md",
     "LICENSE",
@@ -40,8 +41,9 @@
   ],
   "scripts": {
     "setup": "python3 scripts/se-setup.py",
-    "check": "python3 -m py_compile scripts/se-cli.py scripts/se-setup.py scripts/se-smoke-test.py super-engineer-workflow/scripts/*.py",
+    "check": "python3 -m py_compile scripts/se-cli.py scripts/se-setup.py scripts/se-smoke-test.py scripts/se-e2e-test.py super-engineer-workflow/scripts/*.py",
     "smoke": "python3 scripts/se-smoke-test.py",
+    "e2e": "python3 scripts/se-e2e-test.py",
     "pack:check": "npm pack --dry-run"
   },
   "keywords": [

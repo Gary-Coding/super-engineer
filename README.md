@@ -111,11 +111,22 @@ se init
 ```bash
 se init      # 交互式安装 skill 并初始化工作区
 se doctor    # 检查本机环境和 workspace.yml
+se templates # 查看内置 workspace.yml 模板
 se install   # 安装 skill 到 Codex / Claude
 se sync      # 强制同步最新 skill 到 Codex / Claude
 se migrate   # 补齐旧工作区缺失配置
 se version   # 查看版本
 ```
+
+模板入口：
+
+```bash
+se templates
+se template show openspec-auto
+se template copy openspec-auto --workspace /path/to/ai-workspace --demand-name 13-your-demand --code-path ../code
+```
+
+模板说明见 [docs/模板使用指南.md](/Users/muke/Documents/personal/codex/super-engineer/docs/模板使用指南.md)。
 
 本地源码开发时，也可以直接使用引导脚本。默认是一步一步的交互式向导：
 
