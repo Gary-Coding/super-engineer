@@ -294,16 +294,24 @@ def command_plan(workspace: Path | None) -> None:
         raise SystemExit(str(error))
     if active:
         session = active.get("session", {})
-        print("session_action=reused")
-        print(f"session_id={session.get('session_id', '')}")
-        print(f"phase={active.get('phase', '')}")
-        print("next_action=当前计划已存在，继续执行 /se:apply。")
-        return
-    command_init(workspace)
-    config = load_workspace_config(workspace)
-    session_meta = create_session(config)
-    print("session_action=created")
-    print(f"session_id={session_meta.get('session_id', '')}")
+        session_meta = session
+        if active.get("incomplete"):
+            print("session_action=reused_incomplete")
+            print(f"session_id={session_meta.get('session_id', '')}")
+            print(f"phase={active.get('phase', '')}")
+            print("next_action=复用未完成计划会话，继续生成 discovery/plan。")
+        else:
+            print("session_action=reused")
+            print(f"session_id={session_meta.get('session_id', '')}")
+            print(f"phase={active.get('phase', '')}")
+            print("next_action=当前计划已存在，继续执行 /se:apply。")
+            return
+    else:
+        command_init(workspace)
+        config = load_workspace_config(workspace)
+        session_meta = create_session(config)
+        print("session_action=created")
+        print(f"session_id={session_meta.get('session_id', '')}")
     command_discover(workspace)
     args = ["--workspace", str(workspace)] if workspace else []
     run_python("generate-smart-plan.py", args)

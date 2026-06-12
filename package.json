@@ -1,6 +1,6 @@
 {
   "name": "super-engineer-workflow",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Super Engineer workflow skill and CLI for demand-driven AI delivery with OpenSpec bridge support.",
   "license": "MIT",
   "author": "Gary-Coding",

@@ -652,17 +652,13 @@ def create_session(config: dict[str, Any]) -> dict[str, Any]:
         },
     )
     Path(session_meta["data_dir"]).mkdir(parents=True, exist_ok=True)
-    Path(session_meta["report_dir"]).mkdir(parents=True, exist_ok=True)
     write_managed_json(config, current_session_file(config), session_meta)
     return session_meta
 
 
 def current_session_meta(config: dict[str, Any]) -> dict[str, Any]:
     session_meta = read_json(current_session_file(config), {})
-    normalized = _normalize_session_meta(config, session_meta)
-    Path(normalized["data_dir"]).mkdir(parents=True, exist_ok=True)
-    Path(normalized["report_dir"]).mkdir(parents=True, exist_ok=True)
-    return normalized
+    return _normalize_session_meta(config, session_meta)
 
 
 def current_session_status(config: dict[str, Any], session_meta: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -678,16 +674,26 @@ def active_session_for_plan(config: dict[str, Any]) -> dict[str, Any] | None:
         session_meta = current_session_meta(config)
     except FileNotFoundError:
         return None
-    if not data_artifact_path(config, "plan.json", session_meta).exists():
-        return None
+    data_dir = Path(str(session_meta["data_dir"]))
+    has_plan = data_artifact_path(config, "plan.json", session_meta).exists()
     status = current_session_status(config, session_meta)
     status_phase = str(status.get("phase", "") or "").strip()
     if status_phase in ("done", "archived", "blocked"):
+        return None
+    if not has_plan and data_dir.exists():
+        return {
+            "session": session_meta,
+            "status": status,
+            "phase": status_phase or "draft",
+            "incomplete": True,
+        }
+    if not has_plan:
         return None
     return {
         "session": session_meta,
         "status": status,
         "phase": status_phase or "plan",
+        "incomplete": False,
     }
 
 
@@ -697,6 +703,8 @@ def ensure_plan_can_run(config: dict[str, Any]) -> dict[str, Any] | None:
         return None
     phase = str(active.get("phase", "")).strip()
     session = active.get("session", {})
+    if active.get("incomplete"):
+        return active
     if phase in ("plan", "wait_confirm_plan"):
         return active
     raise RuntimeError(

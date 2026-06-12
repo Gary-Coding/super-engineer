@@ -24,6 +24,7 @@ def main() -> None:
         os.environ["USERPROFILE"] = str(home)
         test_templates_cli(root)
         test_openspec_state_and_bridge(root)
+        test_incomplete_plan_session_is_reused(root)
         test_todo_auto_session_and_verify_compaction(root)
     print("e2e_test=ok")
 
@@ -321,6 +322,84 @@ def test_todo_auto_session_and_verify_compaction(root: Path) -> None:
         raise AssertionError("todo auto session did not finish with done status")
     if notification.get("status") != "skipped":
         raise AssertionError("notification should be marked skipped when no provider is configured")
+
+
+def test_incomplete_plan_session_is_reused(root: Path) -> None:
+    workspace = root / "incomplete-plan-workspace"
+    code = root / "broken-code" / "not-a-project"
+    demand_dir = workspace / "superengineer" / "10-broken"
+    demand_dir.mkdir(parents=True)
+    code.mkdir(parents=True)
+    (workspace / "docs").mkdir(parents=True)
+    (workspace / "workspace.yml").write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "mode: auto",
+                "workflow_source: todo",
+                "vars:",
+                "  demand_name: 10-broken",
+                "todo_file: superengineer/${demand_name}/todo.md",
+                "reference_files: []",
+                "code_path: ../broken-code/not-a-project",
+                "output_dir: superengineer/${demand_name}/output",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (demand_dir / "todo.md").write_text(
+        "# 限制条件\n"
+        "- 修改的服务是 broken-service\n\n"
+        "# 待办事项\n\n"
+        "- [ ] 增加一个测试接口\n",
+        encoding="utf-8",
+    )
+
+    first_apply = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:apply",
+        ],
+        check=False,
+    )
+    if first_apply.returncode == 0 or "未找到可识别的项目目录" not in first_apply.output:
+        raise AssertionError("first /se:apply should fail before plan is generated")
+    current = read_json(workspace / ".super-engineer" / "current-session.json")
+    first_session_id = current["session_id"]
+    sessions_dir = workspace / ".super-engineer" / "sessions"
+    output_dir = workspace / "superengineer" / "10-broken" / "output"
+    if len(list(sessions_dir.iterdir())) != 1:
+        raise AssertionError("first failed /se:apply should create exactly one reusable data session")
+    if output_dir.exists() and list(output_dir.iterdir()):
+        raise AssertionError("failed plan should not create an empty output report session")
+
+    second_apply = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:apply",
+        ],
+        check=False,
+    )
+    if second_apply.returncode == 0 or "session_action=reused_incomplete" not in second_apply.output:
+        raise AssertionError("second /se:apply should reuse the incomplete planning session")
+    current = read_json(workspace / ".super-engineer" / "current-session.json")
+    if current["session_id"] != first_session_id:
+        raise AssertionError("incomplete planning session should remain current")
+    if len(list(sessions_dir.iterdir())) != 1:
+        raise AssertionError("repeated failed /se:apply should not create another data session")
+    if output_dir.exists() and list(output_dir.iterdir()):
+        raise AssertionError("repeated failed /se:apply should not create output report sessions")
 
 
 def run(command: list[str], check: bool = True, env: dict[str, str] | None = None):

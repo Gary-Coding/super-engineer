@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+- 修复计划生成失败或中断后重复 `/se:apply` 会创建多个空 session/output 目录的问题。
+
 ## 0.1.5
 
 - 修复重复执行 `/se:plan` 会创建多个 session 的问题：计划阶段复用当前 session，交付中重复 plan 会被拒绝。
