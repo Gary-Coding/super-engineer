@@ -90,7 +90,7 @@ OpenSpec 模式下，脚本会维护 `.super-engineer/se-state.json`。
 
 完整协议见：
 
-- [docs/se命令协议.md](/Users/muke/Documents/personal/codex/super-engineer/docs/se命令协议.md)
+- [docs/se命令协议.md](docs/se命令协议.md)
 
 ## 用户如何开始
 
@@ -131,8 +131,8 @@ se template show openspec-auto
 se template copy openspec-auto --workspace /path/to/ai-workspace --demand-name 13-your-demand --code-path ../code
 ```
 
-模板说明见 [docs/模板使用指南.md](/Users/muke/Documents/personal/codex/super-engineer/docs/模板使用指南.md)。
-跨平台支持说明见 [docs/跨平台支持矩阵.md](/Users/muke/Documents/personal/codex/super-engineer/docs/跨平台支持矩阵.md)。
+模板说明见 [docs/模板使用指南.md](./模板使用指南.md)。
+跨平台支持说明见 [docs/跨平台支持矩阵.md](./跨平台支持矩阵.md)。
 
 本地源码开发时，也可以直接使用引导脚本。默认是一步一步的交互式向导：
 
@@ -300,13 +300,13 @@ OpenSpec 模式额外产物：
 
 ## 文档入口
 
-- [docs/se命令协议.md](/Users/muke/Documents/personal/codex/super-engineer/docs/se命令协议.md)
-- [docs/中文使用手册.md](/Users/muke/Documents/personal/codex/super-engineer/docs/中文使用手册.md)
-- [docs/项目架构与设计说明.md](/Users/muke/Documents/personal/codex/super-engineer/docs/项目架构与设计说明.md)
-- [super-engineer-workflow/SKILL.md](/Users/muke/Documents/personal/codex/super-engineer/super-engineer-workflow/SKILL.md)
-- [super-engineer-workflow/references/workflow.md](/Users/muke/Documents/personal/codex/super-engineer/super-engineer-workflow/references/workflow.md)
-- [super-engineer-workflow/references/contracts.md](/Users/muke/Documents/personal/codex/super-engineer/super-engineer-workflow/references/contracts.md)
+- [docs/se命令协议.md](docs/se命令协议.md)
+- [docs/中文使用手册.md](docs/中文使用手册.md)
+- [docs/项目架构与设计说明.md](docs/项目架构与设计说明.md)
+- [super-engineer-workflow/SKILL.md](super-engineer-workflow/SKILL.md)
+- [super-engineer-workflow/references/workflow.md](super-engineer-workflow/references/workflow.md)
+- [super-engineer-workflow/references/contracts.md](super-engineer-workflow/references/contracts.md)
 
 ## 许可证
 
-本项目使用 [MIT License](/Users/muke/Documents/personal/codex/super-engineer/LICENSE)。
+本项目使用 [MIT License](LICENSE)。
