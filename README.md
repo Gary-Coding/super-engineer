@@ -61,7 +61,7 @@ OpenSpec 模式下，脚本会维护 `.super-engineer/se-state.json`。
 `/se:propose` 后只允许 `/se:bridge`，`/se:bridge` 后才允许审核后 `/se:apply`，非法跨阶段命令会被脚本拒绝。
 桥接时会记录 `tasks.md` hash；如果后续 OpenSpec tasks 发生变化，`/se:plan` 和 `/se:apply` 会要求重新 `/se:bridge`，避免规格和交付 todo 不一致。
 
-为降低 token 消耗，`/se:*` 协议已按命令拆分到 `super-engineer-workflow/references/commands/`。AI 收到某个命令时只需要读取公共协议和对应命令文件，完整旧协议仅用于排查。
+为降低 token 消耗，`/se:*` 协议已按命令拆分到 `super-engineer-workflow/references/commands/`。AI 收到某个命令时只读取公共协议和对应命令文件。
 
 标准工作流产物由脚本写入，AI 不应手工伪造 `.super-engineer` 状态文件、`verify.json`、`notification.json` 或 output 下的标准报告。飞书通知只以 `notification.json` 中由 `run-workflow.py verify` 生成的记录为准。
 

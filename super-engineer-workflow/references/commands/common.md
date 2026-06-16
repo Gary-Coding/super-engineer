@@ -29,4 +29,4 @@
 - `/se:apply`：优先 `todo.md`、`plan-summary.json`、目标代码文件。
 - `/se:review` / `/se:verify`：优先读取 summary 和脚本报告，不展开长 diff 或长日志。
 
-完整旧协议保留在 `references/se-commands.md`，仅排查协议细节时读取。
+命令细节只允许读取 `references/commands/` 下的对应命令文件。

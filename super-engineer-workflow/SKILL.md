@@ -35,7 +35,6 @@ For command details, read [references/commands/common.md](references/commands/co
 - `/se:archive-check` and `/se:archive`: [references/commands/archive.md](references/commands/archive.md)
 - `/se:status`: [references/commands/status.md](references/commands/status.md)
 
-Read [references/se-commands.md](references/se-commands.md) only for legacy troubleshooting.
 For mode and artifact details, use [references/workflow.md](references/workflow.md) and [references/execution-modes.md](references/execution-modes.md) only when needed.
 
 ## Minimal Required Steps
@@ -97,4 +96,4 @@ Todo mode uses current session `status.json` and `todo-state.json`; do not write
 - Review: `python3 scripts/run-workflow.py review`
 - Verify: `python3 scripts/run-workflow.py verify`
 
-OpenSpec-specific legacy details are listed in [references/se-commands.md](references/se-commands.md).
+OpenSpec-specific execution details are enforced by the command files under [references/commands/](references/commands/).

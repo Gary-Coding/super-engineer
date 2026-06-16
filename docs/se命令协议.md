@@ -1,335 +1,80 @@
 # `se` 命令协议
 
-`se` 是 `super-engineer` 的专属命令前缀。
+`/se:*` 是用户发给 AI 的工作流指令，不是 shell 命令，也不是 OpenSpec `/opsx:*`。
 
-它的定位不是 shell 命令，而是用户发给 AI 的工作流指令。  
-AI 收到这些指令后，再根据当前工作空间、当前模式和当前阶段，调用内部 workflow。
+用户只需要输入命令；AI 会根据当前 `workspace.yml`、状态机和 skill 协议调用底层脚本。
 
-## 1. 设计原则
+## 命令顺序
 
-- 不复用 OpenSpec 官方 `/opsx:*`
-- `se` 只表达 `super-engineer` 的工作流意图
-- 用户只面向阶段说话，不需要关心底层脚本
-- `openspec` 模式下，桥接 todo 是桥接产物，不是规格源头
-- 桥接 todo 的实际路径由 `workspace.yml.todo_file` 决定，推荐继续使用 `todo.md`
-- OpenSpec change 名称必须在 `/se:propose <change-name>` 中显式指定，AI 不得根据需求标题或 `vars.demand_name` 自行推导
-
-## 2. 阶段模型
-
-推荐把整个流程分成三段：
-
-1. 规格阶段
-2. 交付阶段
-3. 归档阶段
-
-典型状态流转：
-
-```text
-draft
--> proposed
--> bridged
--> planned
--> implementing
--> self_checked
--> reviewed
--> verified
--> archive_ready
--> archived
-```
-
-如果出现阻塞，则进入：
-
-```text
-blocked
-```
-
-实际状态由 `<workspace>/.super-engineer/se-state.json` 维护，脚本会根据 `allowed_next` 拒绝非法跨阶段命令。
-
-## 3. 命令列表
-
-### `/se:init`
-
-作用：
-
-- 检查 `workspace.yml`
-- 检查 `~/.super-engineer/skill-config.yml`
-- 初始化工作流运行目录
-
-适用模式：
-
-- `todo`
-- `openspec`
-
-典型提示词：
+### todo 模式
 
 ```text
 /se:init
-使用当前工作空间，检查 workspace 是否可用，并告诉我缺哪些配置。
+-> /se:plan 或 /se:apply
+-> /se:review
+-> /se:verify
 ```
 
-### `/se:propose <change-name>`
+`todo + auto` 通常可以直接从 `/se:apply` 开始。
 
-作用：
+### OpenSpec 模式
 
-- 为当前需求生成或完善 OpenSpec change
-- 产出或更新 `proposal.md`、`design.md`、`tasks.md`
-- 优先读取 `workspace.yml.demand_file` 作为原始需求输入
-- 读取 `workspace.yml.reference_files` 中真实存在的参考文件作为上下文
-- 优先使用 OpenSpec CLI 创建 change、读取 status 和 artifact instructions
+```text
+/se:propose <change-name>
+-> /se:bridge
+-> 人工审核 todo.md
+-> /se:apply
+-> /se:archive-check
+-> /se:archive
+```
 
-适用模式：
+`/se:propose` 后禁止直接 `/se:apply`；必须先 `/se:bridge`。
 
-- `openspec`
+## 命令表
 
-典型提示词：
+| 命令 | 作用 | 下一步 |
+| --- | --- | --- |
+| `/se:init` | 初始化或检查工作区 | todo 模式可 `/se:apply`，OpenSpec 模式可 `/se:propose <change-name>` |
+| `/se:propose <change-name>` | 生成或修正 OpenSpec change，不改代码 | `/se:bridge` |
+| `/se:bridge` | 将 `tasks.md` 桥接为待审核 `todo.md` | 审核后 `/se:apply` |
+| `/se:plan` | 只生成实施计划，不改代码 | `/se:apply` |
+| `/se:apply` | 进入交付，实现、自查，并在 auto 模式继续 review/verify | 失败则修复后重跑，通过后看状态 |
+| `/se:review` | 单独执行代码审查 | `/se:verify` 或 `/se:apply` 修复 |
+| `/se:verify` | 执行验证并由脚本发送通知 | OpenSpec 模式下一步 `/se:archive-check` |
+| `/se:archive-check` | 检查 OpenSpec 是否可安全归档 | safe_merge 后 `/se:archive` |
+| `/se:archive` | 归档 OpenSpec change 和相关 specs | 完成 |
+| `/se:status` | 查看当前状态和阻塞项 | 按 allowed_next 继续 |
+
+## 最短提示词
+
+OpenSpec 模式：
 
 ```text
 /se:propose add-user-phone-filter
-请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
-```
-
-### `/se:bridge`
-
-作用：
-
-- 读取当前 OpenSpec change
-- 把 `tasks.md` 转成桥接 todo
-- 输出待审核执行清单
-
-适用模式：
-
-- `openspec`
-
-前置条件：
-
-- 当前 change 已存在 `tasks.md`
-
-典型提示词：
-
-```text
-/se:bridge
-针对当前 OpenSpec change 生成桥接 todo，并总结待审核项。
-```
-
-### `/se:plan`
-
-作用：
-
-- 创建新的交付会话
-- 生成 `plan.json` 和 `plan.md`
-- 给出影响范围、验收标准和主要风险
-
-适用模式：
-
-- `todo`
-- `openspec`
-
-前置条件：
-
-- `todo` 模式：`todo.md` 已存在
-- `openspec` 模式：推荐在 `/se:bridge` 后人工审核 `todo.md`，再执行
-
-典型提示词：
-
-```text
-/se:plan
-使用当前工作空间。
-基于当前交付输入生成计划，先不要改代码。
-```
-
-### `/se:apply`
-
-作用：
-
-- 启动交付阶段
-- 由脚本进入实现阶段，AI 按 `plan.json` 修改业务代码
-- 实现完成后由脚本推进自查、审查、验证
-- `openspec` 模式下 verify 后自动回写执行摘要
-
-适用模式：
-
-- `todo`
-- `openspec`
-
-前置条件：
-
-- `todo` 模式：`todo.md` 已存在
-- `openspec` 模式：当前桥接 todo 已审核通过
-
-典型提示词：
-
-```text
-/se:apply
-使用当前工作空间。
-如果没有硬阻塞，继续推进当前交付阶段。
-```
-
-### `/se:review`
-
-作用：
-
-- 对当前代码改动做审查
-- 给出 gate、blocking findings、warning findings
-
-适用模式：
-
-- `todo`
-- `openspec`
-
-典型提示词：
-
-```text
-/se:review
-继续当前工作空间，对当前改动做代码审查。
-```
-
-### `/se:verify`
-
-作用：
-
-- 执行验证
-- 汇总每个仓库的验证结果
-- 判断当前 workflow 是 `done` 还是 `blocked`
-
-适用模式：
-
-- `todo`
-- `openspec`
-
-典型提示词：
-
-```text
-/se:verify
-继续当前工作空间，执行验证并汇报结果。
-```
-
-### `/se:archive-check`
-
-作用：
-
-- 检查当前 OpenSpec change 是否满足归档条件
-- 输出 `archive_ready`、`merge_mode`、`blockers`、`spec_conflicts`
-
-适用模式：
-
-- `openspec`
-
-前置条件：
-
-- 当前 change 已完成交付并已有执行摘要
-
-典型提示词：
-
-```text
-/se:archive-check
-检查当前 OpenSpec change 是否满足归档条件。
-```
-
-### `/se:archive`
-
-作用：
-
-- 在满足安全条件时执行归档
-- 同步 delta specs
-- 移动当前 change 到 archive 目录
-
-适用模式：
-
-- `openspec`
-
-前置条件：
-
-- `archive_ready=true`
-- `merge_mode=safe_merge`
-- `spec_conflicts` 为空
-
-典型提示词：
-
-```text
-/se:archive
-仅在当前 change 满足安全归档条件时执行归档。
-```
-
-### `/se:status`
-
-作用：
-
-- 查看当前阶段
-- 查看当前 session
-- 查看阻塞项和下一步建议
-
-适用模式：
-
-- `todo`
-- `openspec`
-
-典型提示词：
-
-```text
-/se:status
-告诉我当前工作流处在哪个阶段，还有哪些阻塞项。
-```
-
-## 4. 两种模式下怎么理解命令
-
-### `todo` 模式
-
-`todo` 模式通常从这里开始：
-
-- `/se:init`
-- `/se:plan`
-- `/se:apply`
-
-如果是 `auto`，通常直接 `/se:apply`。  
-如果是 `manual`，通常先 `/se:plan`，再逐步 `/se:apply`、`/se:review`、`/se:verify`。
-
-### `openspec` 模式
-
-`openspec` 模式通常从这里开始：
-
-- `/se:propose <change-name>`
-- `/se:bridge`
-- `/se:plan` 或 `/se:apply`
-- `/se:archive-check`
-- `/se:archive`
-
-核心区别是：
-
-- `todo` 模式的输入是用户直接维护的 `todo.md`
-- `openspec` 模式的输入先是 OpenSpec change，再桥接成桥接 todo
-
-## 5. 推荐使用约束
-
-- `openspec` 模式下，不建议跳过 `/se:bridge`
-- `openspec` 模式下，不建议跳过桥接 todo 的人工审核
-- `manual` 模式下，建议在 `/se:plan` 之后先看计划再进入实现
-- `auto` 模式下，只有出现硬阻塞才应该停下
-- 归档前一定先做 `/se:archive-check`
-
-## 6. 一个完整例子
-
-下面是一条比较完整的 `openspec + auto` 使用链路：
-
-```text
-/se:propose add-user-phone-filter
-请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 
 ```text
 /se:bridge
-针对当前 OpenSpec change 生成桥接 todo，并总结待审核项。
 ```
+
+审核 `todo.md` 后：
 
 ```text
 /se:apply
-我已审核当前桥接 todo，可以进入交付阶段。
-使用当前工作空间。
-当前模式是 openspec + auto。
-如果没有硬阻塞，自动推进到 verify。
-verify 通过后继续检查归档条件；如果结果为 safe_merge，状态进入 archive_ready，下一步再执行 /se:archive。
 ```
 
+todo 模式：
+
 ```text
-/se:status
-告诉我当前交付是否完成，是否已经进入归档阶段。
+/se:apply
 ```
+
+## 约束
+
+- `workspace.yml` 是用户维护的契约，AI 禁止修改。
+- 状态、报告、通知必须由脚本生成。
+- 飞书/PushPlus 通知只能由 verify 脚本发送。
+- OpenSpec `tasks.md` 在 bridge 后发生变化时，必须重新 `/se:bridge`。
+- 归档前必须先 `/se:archive-check`。
+
+AI 内部执行协议以 `super-engineer-workflow/references/commands/` 下的命令分片为准。
