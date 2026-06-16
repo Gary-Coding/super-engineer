@@ -24,16 +24,28 @@ Supported commands:
 - `/se:archive`
 - `/se:status`
 
-For command details, read only the relevant section in [references/se-commands.md](references/se-commands.md).
+For command details, read [references/commands/common.md](references/commands/common.md) plus only the matching command file:
+
+- `/se:propose`: [references/commands/propose.md](references/commands/propose.md)
+- `/se:bridge`: [references/commands/bridge.md](references/commands/bridge.md)
+- `/se:plan`: [references/commands/plan.md](references/commands/plan.md)
+- `/se:apply`: [references/commands/apply.md](references/commands/apply.md)
+- `/se:review`: [references/commands/review.md](references/commands/review.md)
+- `/se:verify`: [references/commands/verify.md](references/commands/verify.md)
+- `/se:archive-check` and `/se:archive`: [references/commands/archive.md](references/commands/archive.md)
+- `/se:status`: [references/commands/status.md](references/commands/status.md)
+
+Read [references/se-commands.md](references/se-commands.md) only for legacy troubleshooting.
 For mode and artifact details, use [references/workflow.md](references/workflow.md) and [references/execution-modes.md](references/execution-modes.md) only when needed.
 
 ## Minimal Required Steps
 
 1. Read `<workspace>/workspace.yml`.
 2. Identify `workflow_source`, `mode`, `todo_file`, `demand_file`, `reference_files`, `code_path`, `output_dir`, and optional `openspec` fields.
-3. Route the current command through `python3 scripts/run-workflow.py route-se --command-text "<command>"` when possible.
-4. Obey script state validation and script reply constraints.
-5. Report compactly: result, blockers, allowed next command, and key artifact paths.
+3. Preflight with `python3 scripts/run-workflow.py route-check --command-text "<command>"` when possible.
+4. Route the current command through `python3 scripts/run-workflow.py route-se --command-text "<command>"` when preflight passes.
+5. Obey script state validation and script reply constraints.
+6. Report compactly: result, blockers, allowed next command, and key artifact paths.
 
 ## Hard Constraints
 
@@ -75,10 +87,11 @@ Todo mode uses current session `status.json` and `todo-state.json`; do not write
 
 ## Script Entry Points
 
+- Preflight router: `python3 scripts/run-workflow.py route-check --command-text "<command>"`
 - Main router: `python3 scripts/run-workflow.py route-se --command-text "<command>"`
 - Status: `python3 scripts/run-workflow.py status`
 - Plan: `python3 scripts/run-workflow.py plan`
 - Review: `python3 scripts/run-workflow.py review`
 - Verify: `python3 scripts/run-workflow.py verify`
 
-OpenSpec-specific internal commands are listed in [references/se-commands.md](references/se-commands.md).
+OpenSpec-specific legacy details are listed in [references/se-commands.md](references/se-commands.md).

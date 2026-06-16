@@ -5,6 +5,7 @@ import argparse
 import importlib.util
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,65 @@ WORKSPACE_TEMPLATES: dict[str, str] = {
     "java-microservice": "Java / Spring 微服务模板，内置 Maven 验证命令示例。",
     "frontend": "Vue / React 前端模板，内置 pnpm/npm 验证命令示例。",
     "multi-repo": "多仓库聚合目录模板，适用于中台或跨服务需求。",
+}
+
+
+SE_COMMANDS: dict[str, str] = {
+    "propose.md": """---
+description: Super Engineer：生成或完善 OpenSpec change
+argument-hint: <change-name>
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:propose $ARGUMENTS`。
+如果 `$ARGUMENTS` 为空，请先询问用户提供 OpenSpec change 名称。
+""",
+    "propose-fix.md": """---
+description: Super Engineer：需求补充后修正当前 OpenSpec change
+argument-hint: <change-name>
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:propose $ARGUMENTS`。
+当前需求有补充，请修正当前 OpenSpec change；不要创建新的 change，不要改代码。
+""",
+    "bridge.md": """---
+description: Super Engineer：生成桥接 todo
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:bridge`。
+生成桥接 todo 并总结待审核项，不要改代码，不要进入实现。
+""",
+    "plan.md": """---
+description: Super Engineer：只生成实施计划
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:plan`。
+只生成计划，不要改代码。
+""",
+    "apply.md": """---
+description: Super Engineer：审核 todo 后进入交付阶段
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:apply`。
+我已审核当前桥接 todo，可以进入交付阶段。
+""",
+    "archive-check.md": """---
+description: Super Engineer：检查 OpenSpec 归档条件
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:archive-check`。
+""",
+    "archive.md": """---
+description: Super Engineer：归档 OpenSpec change
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:archive`。
+""",
+    "status.md": """---
+description: Super Engineer：查看工作流状态
+---
+
+请使用 super-engineer-workflow skill 执行：`/se:status`。
+""",
 }
 
 
@@ -56,6 +116,7 @@ def main() -> None:
     doctor_parser = subparsers.add_parser("doctor", help="检查本机环境和工作区配置。")
     doctor_parser.add_argument("--workspace", default=".", help="工作区目录，默认当前目录。")
     doctor_parser.add_argument("--json", action="store_true", help="输出 JSON。")
+    doctor_parser.add_argument("--fix", action="store_true", help="尽量自动补齐 skill 和快捷命令。")
 
     migrate_parser = subparsers.add_parser("migrate", help="补齐旧工作区缺失的 workspace.yml 配置项。")
     migrate_parser.add_argument("--workspace", default=".", help="工作区目录，默认当前目录。")
@@ -87,7 +148,7 @@ def main() -> None:
         install_targets(args.target, force=True)
         return
     if args.command == "doctor":
-        exit_code = doctor(Path(args.workspace).expanduser().resolve(), output_json=args.json)
+        exit_code = doctor(Path(args.workspace).expanduser().resolve(), output_json=args.json, fix=args.fix)
         raise SystemExit(exit_code)
     if args.command == "migrate":
         exit_code = migrate(Path(args.workspace).expanduser().resolve(), dry_run=args.dry_run)
@@ -196,14 +257,22 @@ def copy_template(name: str, workspace: Path, demand_name: str, code_path: str, 
     print(f"✓ 已写入模板：{target}")
 
 
-def doctor(workspace: Path, output_json: bool) -> int:
+def doctor(workspace: Path, output_json: bool, fix: bool = False) -> int:
+    if fix:
+        install_targets("both", force=True)
+        ensure_workspace_commands(workspace)
+
     checks: list[dict[str, str]] = []
+    add_check(checks, "platform", "ok", f"{platform.system()} {platform.release()}")
     add_check(checks, "python", "ok", sys.version.split()[0])
+    add_check(checks, "node", "ok" if shutil.which("node") else "fail", shutil.which("node") or "未安装")
+    add_check(checks, "npm", "ok" if shutil.which("npm") else "fail", shutil.which("npm") or "未安装")
     add_check(checks, "skill_source", "ok" if SKILL_DIR.exists() else "fail", str(SKILL_DIR))
     add_check(checks, "codex_skill", "ok" if skill_target("codex").exists() else "warn", str(skill_target("codex")))
     add_check(checks, "claude_skill", "ok" if skill_target("claude").exists() else "warn", str(skill_target("claude")))
     add_check(checks, "openspec_cli", "ok" if shutil.which("openspec") else "warn", shutil.which("openspec") or "未安装")
     add_check(checks, "workspace", "ok" if workspace.exists() else "fail", str(workspace))
+    add_check(checks, "workspace.commands.se", "ok" if workspace_commands_ready(workspace) else "warn", str(workspace / ".claude" / "commands" / "se"))
 
     workspace_yml = workspace / "workspace.yml"
     add_check(checks, "workspace_yml", "ok" if workspace_yml.exists() else "fail", str(workspace_yml))
@@ -223,8 +292,44 @@ def doctor(workspace: Path, output_json: bool) -> int:
         for check in checks:
             mark = {"ok": "✓", "warn": "!", "fail": "✗"}[check["status"]]
             print(f"{mark} {check['name']}: {check['message']}")
+        suggestions = doctor_suggestions(checks)
+        if suggestions:
+            print("\n建议：")
+            for item in suggestions:
+                print(f"- {item}")
 
     return 1 if any(item["status"] == "fail" for item in checks) else 0
+
+
+def workspace_commands_ready(workspace: Path) -> bool:
+    commands_dir = workspace / ".claude" / "commands" / "se"
+    required = ["propose.md", "bridge.md", "plan.md", "apply.md", "status.md"]
+    return all((commands_dir / name).exists() for name in required)
+
+
+def ensure_workspace_commands(workspace: Path) -> None:
+    workspace.mkdir(parents=True, exist_ok=True)
+    commands_dir = workspace / ".claude" / "commands" / "se"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in SE_COMMANDS.items():
+        (commands_dir / filename).write_text(content, encoding="utf-8")
+    print(f"✓ 已补齐快捷命令: {commands_dir}")
+
+
+def doctor_suggestions(checks: list[dict[str, str]]) -> list[str]:
+    by_name = {item["name"]: item for item in checks}
+    suggestions: list[str] = []
+    if by_name.get("codex_skill", {}).get("status") != "ok" or by_name.get("claude_skill", {}).get("status") != "ok":
+        suggestions.append("执行 `se sync --target both` 同步最新 skill。")
+    if by_name.get("workspace.commands.se", {}).get("status") != "ok":
+        suggestions.append("执行 `se doctor --fix` 补齐工作区 `.claude/commands/se/*` 快捷命令。")
+    if by_name.get("workspace_yml", {}).get("status") != "ok":
+        suggestions.append("执行 `se init` 初始化工作区，或用 `se template copy <模板名>` 生成 workspace.yml。")
+    if by_name.get("openspec_cli", {}).get("status") != "ok":
+        suggestions.append("OpenSpec 模式建议先安装并初始化 OpenSpec；todo 模式可忽略。")
+    if by_name.get("node", {}).get("status") != "ok" or by_name.get("npm", {}).get("status") != "ok":
+        suggestions.append("请先安装 Node.js/npm。")
+    return suggestions
 
 
 def add_check(checks: list[dict[str, str]], name: str, status: str, message: str) -> None:

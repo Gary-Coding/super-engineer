@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from common import ensure_workflow_inputs, load_workspace_config, todo_path, update_se_state, workflow_source, workspace_root
+from common import ensure_workflow_inputs, load_workspace_config, openspec_tasks_hash, todo_path, update_se_state, workflow_source, workspace_root
 
 
 def main() -> None:
@@ -30,12 +30,14 @@ def main() -> None:
         artifacts={
             "todo": str(todo_path(config)),
             "bridge_source": str(result.get("bridge_source", "")),
+            "tasks_sha256": openspec_tasks_hash(config),
         },
     )
     print(f"workflow_source={result.get('workflow_source', '')}")
     print(f"todo={todo_path(config)}")
     print(f"bridge_generated={'true' if result.get('bridge_generated') else 'false'}")
     print(f"bridge_source={result.get('bridge_source', '')}")
+    print(f"tasks_sha256={openspec_tasks_hash(config)}")
 
 
 if __name__ == "__main__":

@@ -59,6 +59,9 @@
 
 OpenSpec 模式下，脚本会维护 `.super-engineer/se-state.json`。
 `/se:propose` 后只允许 `/se:bridge`，`/se:bridge` 后才允许审核后 `/se:apply`，非法跨阶段命令会被脚本拒绝。
+桥接时会记录 `tasks.md` hash；如果后续 OpenSpec tasks 发生变化，`/se:plan` 和 `/se:apply` 会要求重新 `/se:bridge`，避免规格和交付 todo 不一致。
+
+为降低 token 消耗，`/se:*` 协议已按命令拆分到 `super-engineer-workflow/references/commands/`。AI 收到某个命令时只需要读取公共协议和对应命令文件，完整旧协议仅用于排查。
 
 标准工作流产物由脚本写入，AI 不应手工伪造 `.super-engineer` 状态文件、`verify.json`、`notification.json` 或 output 下的标准报告。飞书通知只以 `notification.json` 中由 `run-workflow.py verify` 生成的记录为准。
 
@@ -111,6 +114,7 @@ se init
 ```bash
 se init      # 交互式安装 skill 并初始化工作区
 se doctor    # 检查本机环境和 workspace.yml
+se doctor --fix # 同步 skill 并补齐工作区快捷命令
 se templates # 查看内置 workspace.yml 模板
 se install   # 安装 skill 到 Codex / Claude
 se sync      # 强制同步最新 skill 到 Codex / Claude
@@ -161,34 +165,24 @@ npm 包入口由 `package.json` 的 `bin` 字段提供，`super-engineer` 和 `s
 
 ```text
 /se:apply
-使用当前工作空间。
-需求是：经销商用户列表接口增加手机号精确筛选，要求兼容旧查询行为，并补齐 controller / service 层测试。
-当前模式是 todo + auto。
-如果 workspace 未初始化，先初始化；如果没有硬阻塞，直接推进到实现、自查、审查和验证。
 ```
 
 `openspec` 模式常见起点：
 
 ```text
 /se:propose add-phone-filter
-请根据当前 workspace 的 demand_file 生成或完善 OpenSpec change。
 ```
 
 然后：
 
 ```text
 /se:bridge
-针对当前 OpenSpec change 生成交付阶段的桥接 todo，并总结待审核项。
 ```
 
 人工确认后：
 
 ```text
 /se:apply
-使用当前工作空间，当前模式是 openspec + auto。
-我已审核当前桥接 todo，可以进入交付阶段。
-如果没有硬阻塞，自动推进到 verify；verify 通过后继续检查归档条件。
-如果结果为 safe_merge，下一步再执行 /se:archive。
 ```
 
 ## 工作空间配置

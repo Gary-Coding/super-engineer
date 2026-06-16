@@ -1,0 +1,32 @@
+# `/se:*` 公共协议
+
+`/se:*` 是 Super Engineer Workflow 的 AI 阶段命令，不是 shell 命令，也不是 OpenSpec `/opsx:*`。
+
+## 必做
+
+1. 读取当前工作区 `workspace.yml`。
+2. 通过 `python3 scripts/run-workflow.py route-check --command-text "<用户命令>"` 做状态预检。
+3. 预检通过后，再执行 `python3 scripts/run-workflow.py route-se --command-text "<用户命令>"`。
+4. 遵守脚本输出的 `final_reply_must` 或 `se_reply_constraint_begin/end`。
+5. 最终回复只汇报结果、阻塞点、允许的下一步和关键相对路径。
+
+## 硬约束
+
+- 禁止编辑 `workspace.yml`。
+- 禁止手写 `.super-engineer/**/status.json`、`se-state.json`、`current-session.json`、`plan.json`、`review.json`、`verify.json`、`notification.json`。
+- 标准状态、报告、通知只能由脚本生成。
+- 一次只执行用户当前明确请求的一个 `/se:*` 命令。
+- `/se:propose` 之后只能提示 `/se:bridge`。
+- `/se:bridge` 之后只能提示人工审核 `todo.md`，审核后 `/se:apply`。
+- `/se:apply` 之前必须已经完成 bridge 且用户已审核 todo。
+- 通知只能由 `run-workflow.py verify` 发送，AI 禁止直接调用飞书或 PushPlus webhook。
+
+## 最小上下文
+
+- `/se:propose`：`workspace.yml`、`demand_file`、必要 `reference_files` 摘要。
+- `/se:bridge`：`tasks.md`、bridge context、`todo_file`。
+- `/se:plan`：`todo.md`、`discovery-summary` 或脚本生成的 plan 产物。
+- `/se:apply`：优先 `todo.md`、`plan-summary.json`、目标代码文件。
+- `/se:review` / `/se:verify`：优先读取 summary 和脚本报告，不展开长 diff 或长日志。
+
+完整旧协议保留在 `references/se-commands.md`，仅排查协议细节时读取。

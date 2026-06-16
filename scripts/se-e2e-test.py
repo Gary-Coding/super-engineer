@@ -58,6 +58,13 @@ def test_templates_cli(root: Path) -> None:
     if "workflow_source: todo" not in workspace_yml or "9-e2e-template" not in workspace_yml:
         raise AssertionError("template copy did not render workspace.yml")
 
+    doctor_before = run(["node", str(CLI), "doctor", "--workspace", str(workspace)], check=False)
+    if "workspace.commands.se" not in doctor_before.output:
+        raise AssertionError("doctor should report workspace command status")
+    run(["node", str(CLI), "doctor", "--workspace", str(workspace), "--fix"], check=False)
+    if not (workspace / ".claude" / "commands" / "se" / "apply.md").exists():
+        raise AssertionError("doctor --fix should create se command templates")
+
 
 def test_openspec_state_and_bridge(root: Path) -> None:
     workspace = root / "openspec-workspace"
@@ -164,6 +171,57 @@ def test_openspec_state_and_bridge(root: Path) -> None:
     todo = read_text(workspace / "superengineer" / "8-demo" / "todo.md")
     if "demo-change" not in todo or "demo-service" not in todo:
         raise AssertionError("bridged todo.md missing expected OpenSpec context")
+
+    route_check = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-check",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:apply",
+        ]
+    )
+    route_payload = json.loads(route_check)
+    if not route_payload.get("allowed") or route_payload.get("run_command") != "apply":
+        raise AssertionError("route-check should return allowed JSON for bridged /se:apply")
+
+    (change_dir / "tasks.md").write_text(
+        "# Tasks\n\n"
+        "- [ ] 修改 demo-service controller 增加状态查询接口\n"
+        "- [ ] 补充验证，确认接口返回 ok\n"
+        "- [ ] 追加变更后必须重新桥接\n",
+        encoding="utf-8",
+    )
+    stale_apply = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:apply",
+        ],
+        check=False,
+    )
+    if stale_apply.returncode == 0 or "tasks.md 已变化" not in stale_apply.output:
+        raise AssertionError("changed tasks.md should require /se:bridge before /se:apply")
+
+    bridge_again = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:bridge",
+        ]
+    )
+    if "tasks_sha256=" not in bridge_again:
+        raise AssertionError("second /se:bridge should record tasks hash")
 
     first_plan = run(
         [

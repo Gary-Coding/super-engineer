@@ -842,6 +842,12 @@ def update_se_state(
     return state
 
 
+def openspec_tasks_hash(config: dict[str, Any]) -> str:
+    if workflow_source(config) != "openspec":
+        return ""
+    return file_sha256(openspec_tasks_path(config))
+
+
 def _se_state_artifact_exists(path_text: str) -> bool:
     return bool(path_text and Path(path_text).exists())
 
@@ -1125,6 +1131,10 @@ def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any
             errors.append("/se:propose 后不能直接进入交付，必须先执行 /se:bridge。")
         if not _se_state_artifact_exists(str(artifacts.get("todo", ""))):
             errors.append("缺少桥接 todo.md，请先执行 /se:bridge。")
+        bridged_hash = str(artifacts.get("tasks_sha256", "")).strip()
+        current_hash = openspec_tasks_hash(config)
+        if bridged_hash and current_hash and bridged_hash != current_hash:
+            errors.append("OpenSpec tasks.md 已变化，请重新执行 /se:bridge 生成待审核 todo.md。")
     elif se_command == "/se:apply":
         if phase not in ("bridged", "planned", "implementing", "reviewed", "blocked") and se_command not in allowed_next:
             errors.append("当前状态不允许进入交付，请先完成 /se:bridge 并人工审核 todo.md。")
@@ -1132,6 +1142,10 @@ def validate_se_state(config: dict[str, Any], run_command: str) -> dict[str, Any
             errors.append("/se:propose 后不能直接进入交付，必须先执行 /se:bridge。")
         if not _se_state_artifact_exists(str(artifacts.get("todo", ""))):
             errors.append("缺少桥接 todo.md，请先执行 /se:bridge。")
+        bridged_hash = str(artifacts.get("tasks_sha256", "")).strip()
+        current_hash = openspec_tasks_hash(config)
+        if bridged_hash and current_hash and bridged_hash != current_hash:
+            errors.append("OpenSpec tasks.md 已变化，请重新执行 /se:bridge 并审核新的 todo.md。")
     elif se_command == "/se:review":
         if phase not in ("self_checked", "reviewed", "blocked"):
             errors.append("当前状态不允许 review，请先完成实现和自查。")

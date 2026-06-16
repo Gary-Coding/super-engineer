@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -199,6 +200,35 @@ def command_route_se(workspace: Path | None, command_text: str | None, timeout_s
     else:
         raise SystemExit(f"不支持的 /se:* 命令：{se_command}")
     print_route_reply_constraint(se_command)
+
+
+def command_route_check(workspace: Path | None, command_text: str | None) -> None:
+    if not command_text:
+        raise SystemExit("缺少 /se:* 命令文本。")
+    config = load_workspace_config(workspace)
+    parsed = parse_se_command(command_text)
+    se_command = parsed["se_command"]
+    run_command = parsed["run_command"]
+    result = validate_se_state(config, run_command)
+    payload = {
+        "se_command": se_command,
+        "run_command": run_command,
+        "argument": str(parsed.get("argument", "")).strip(),
+        "workflow_source": workflow_source(config),
+        "allowed": bool(result.get("valid")),
+        "phase": result.get("phase", ""),
+        "allowed_next": result.get("allowed_next", []),
+        "errors": result.get("errors", []),
+        "state_path": result.get("state_path", ""),
+    }
+    try:
+        session = current_session_meta(config)
+        payload["session_id"] = session.get("session_id", "")
+    except FileNotFoundError:
+        payload["session_id"] = ""
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    if not payload["allowed"]:
+        raise SystemExit(1)
 
 
 def print_route_reply_constraint(se_command: str) -> None:
@@ -473,7 +503,7 @@ def command_apply(workspace: Path | None, timeout_seconds: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="super-engineer 统一工作流入口。")
-    parser.add_argument("command", choices=["route-se", "init", "propose-openspec", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "apply", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next", "validate-state", "assert-standard-session"])
+    parser.add_argument("command", choices=["route-se", "route-check", "init", "propose-openspec", "bootstrap-openspec", "writeback-openspec", "prepare-archive-openspec", "archive-openspec", "discover", "plan", "apply", "start-implement", "finish-implement", "self-check", "review", "verify", "status", "next", "validate-state", "assert-standard-session"])
     parser.add_argument("change_name", nargs="?", help="配合 propose-openspec 或 validate-state 使用。")
     parser.add_argument("--command-text", help="配合 route-se 使用，传入完整 /se:* 命令文本。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
@@ -486,6 +516,8 @@ def main() -> None:
 
     if args.command == "route-se":
         command_route_se(workspace, args.command_text or args.change_name, args.timeout_seconds, args.force)
+    elif args.command == "route-check":
+        command_route_check(workspace, args.command_text or args.change_name)
     elif args.command == "init":
         command_init(workspace)
     elif args.command == "propose-openspec":
