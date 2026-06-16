@@ -1,21 +1,17 @@
 # Changelog
 
-## 0.1.8
+## 0.1.7
 
+- 拆分 `/se:*` 协议到 `references/commands/*`，删除旧单体协议入口，AI 按命令读取最小协议上下文，降低固定 token 消耗。
+- 增加 `route-check` JSON 预检入口，统一返回命令、阶段、允许状态和阻塞原因。
+- OpenSpec bridge 记录 `tasks.md` hash；后续 plan/apply 发现 tasks 变化会拒绝继续并要求重新 bridge。
 - 增加 `discovery-summary.json`，plan 阶段优先读取轻量定位摘要，进一步减少完整 discovery 上下文读取。
 - `route-se` 增加 `--json` 摘要输出，并增加跨进程 workflow lock，降低并发或重复 `/se:apply` 的 session 风险。
 - OpenSpec 回写增加 `openspec_hashes` 和独立 `task-mapping.json`，archive-check 会检测 proposal/design/tasks/specs 的 hash 漂移。
+- 增强 `se doctor --fix`，可同步 skill 并补齐多平台命令模板。
 - 增加 `se commands install --target claude|codex|cursor|trae|kimi|all`，补齐主流 AI 编码工具快捷命令模板安装入口。
-- `se doctor --fix` 扩展为同步 skill 并补齐多平台命令模板。
-- 新增跨平台支持矩阵文档，明确 macOS/Linux/Windows Git Bash/PowerShell 支持等级。
-
-## 0.1.7
-
-- 拆分 `/se:*` 协议到 `references/commands/*`，AI 按命令读取最小协议上下文，降低固定 token 消耗。
-- 增加 `route-check` JSON 预检入口，统一返回命令、阶段、允许状态和阻塞原因。
-- OpenSpec bridge 记录 `tasks.md` hash；后续 plan/apply 发现 tasks 变化会拒绝继续并要求重新 bridge。
-- 增强 `se doctor --fix`，可同步 skill 并补齐工作区 `.claude/commands/se/*` 快捷命令。
 - 初始化完成提示改为推荐流程，明确 propose -> bridge -> 审核 todo -> apply。
+- 新增跨平台支持矩阵文档，明确 macOS/Linux/Windows Git Bash/PowerShell 支持等级。
 
 ## 0.1.6
 
