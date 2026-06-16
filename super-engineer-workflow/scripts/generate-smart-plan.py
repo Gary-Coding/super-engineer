@@ -122,6 +122,8 @@ def build_acceptance_criteria(task_breakdown: list[dict[str, object]], detected:
 
 
 def discovery_evidence(discovery: dict, limit: int = 16) -> list[dict[str, object]]:
+    if discovery.get("source") == "run-workflow.py discovery-summary":
+        return list(discovery.get("evidence", []))[:limit]
     evidence: list[dict[str, object]] = []
     for codebase in discovery.get("codebases", []):
         for match in codebase.get("matches", [])[:limit]:
@@ -140,7 +142,10 @@ def discovery_evidence(discovery: dict, limit: int = 16) -> list[dict[str, objec
 
 
 def confidence_from_discovery(discovery: dict, impacted_files: list[str]) -> str:
-    match_count = sum(len(codebase.get("matches", [])) for codebase in discovery.get("codebases", []))
+    if discovery.get("source") == "run-workflow.py discovery-summary":
+        match_count = int(discovery.get("total_match_count", 0) or 0)
+    else:
+        match_count = sum(len(codebase.get("matches", [])) for codebase in discovery.get("codebases", []))
     if match_count >= 5 and impacted_files:
         return "high"
     if match_count > 0 or impacted_files:
@@ -317,6 +322,11 @@ def collect_target_plan_data(config: dict, codebases: list[Path]) -> tuple[list[
 
 def merge_discovery_files(discovery: dict, fallback_files: list[str]) -> list[str]:
     files: list[str] = []
+    if discovery.get("source") == "run-workflow.py discovery-summary":
+        for codebase in discovery.get("codebases", []):
+            files.extend(str(item) for item in codebase.get("top_files", []) if item)
+        files.extend(fallback_files)
+        return unique(files)[:24]
     for codebase in discovery.get("codebases", []):
         for match in codebase.get("matches", []):
             file_path = str(match.get("file", "")).strip()
@@ -369,7 +379,7 @@ def main() -> None:
     summary = summarize_todo(todo_text)
     docs = existing_reference_files(config)
     target_codebases, impacted_files, impacted_modules = collect_target_plan_data(config, codebases)
-    discovery = read_json(data_artifact_path(config, "discovery.json", session_meta), {})
+    discovery = read_json(data_artifact_path(config, "discovery-summary.json", session_meta), {}) or read_json(data_artifact_path(config, "discovery.json", session_meta), {})
     bridge_context = read_json(openspec_bridge_context_path(config), {})
     impacted_files = merge_discovery_files(discovery, impacted_files)
     impacted_modules = infer_java_modules(impacted_files) or impacted_modules

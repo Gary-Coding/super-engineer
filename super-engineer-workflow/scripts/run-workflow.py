@@ -12,6 +12,7 @@ from common import (
     current_session_is_stale,
     current_session_meta,
     data_artifact_path,
+    acquire_workflow_lock,
     ensure_plan_can_run,
     ensure_status,
     load_workspace_config,
@@ -21,6 +22,7 @@ from common import (
     planned_codebase,
     read_json,
     read_se_state,
+    release_workflow_lock,
     require_se_state,
     report_artifact_path,
     recover_se_state_from_artifacts,
@@ -166,7 +168,7 @@ def command_validate_state(workspace: Path | None, command: str | None) -> None:
         raise SystemExit(1)
 
 
-def command_route_se(workspace: Path | None, command_text: str | None, timeout_seconds: int, force: bool = False) -> None:
+def command_route_se(workspace: Path | None, command_text: str | None, timeout_seconds: int, force: bool = False, output_json: bool = False) -> None:
     if not command_text:
         raise SystemExit("缺少 /se:* 命令文本。")
     parsed = parse_se_command(command_text)
@@ -179,27 +181,59 @@ def command_route_se(workspace: Path | None, command_text: str | None, timeout_s
         print(f"argument={argument}")
     if se_command == "/se:init":
         command_init(workspace)
-    elif se_command == "/se:propose":
-        command_propose_openspec(workspace, argument or None)
-    elif se_command == "/se:bridge":
-        command_bootstrap_openspec(workspace, explicit_se_bridge=True)
-    elif se_command == "/se:plan":
-        command_plan(workspace)
-    elif se_command == "/se:apply":
-        command_apply(workspace, timeout_seconds)
-    elif se_command == "/se:review":
-        command_review(workspace)
-    elif se_command == "/se:verify":
-        command_verify(workspace, timeout_seconds, force)
-    elif se_command == "/se:archive-check":
-        command_prepare_archive_openspec(workspace)
-    elif se_command == "/se:archive":
-        command_archive_openspec(workspace)
-    elif se_command == "/se:status":
-        command_status(workspace)
-    else:
-        raise SystemExit(f"不支持的 /se:* 命令：{se_command}")
+        print_route_reply_constraint(se_command)
+        return
+    config = load_workspace_config(workspace)
+    lock_path = None
+    if se_command != "/se:status":
+        try:
+            lock_path = acquire_workflow_lock(config, se_command)
+            print(f"workflow_lock={lock_path}")
+        except RuntimeError as error:
+            if output_json:
+                print(json.dumps({"se_command": se_command, "run_command": run_command, "result": "blocked", "error": str(error)}, ensure_ascii=False, indent=2))
+            raise SystemExit(str(error))
+    try:
+        if se_command == "/se:propose":
+            command_propose_openspec(workspace, argument or None)
+        elif se_command == "/se:bridge":
+            command_bootstrap_openspec(workspace, explicit_se_bridge=True)
+        elif se_command == "/se:plan":
+            command_plan(workspace)
+        elif se_command == "/se:apply":
+            command_apply(workspace, timeout_seconds)
+        elif se_command == "/se:review":
+            command_review(workspace)
+        elif se_command == "/se:verify":
+            command_verify(workspace, timeout_seconds, force)
+        elif se_command == "/se:archive-check":
+            command_prepare_archive_openspec(workspace)
+        elif se_command == "/se:archive":
+            command_archive_openspec(workspace)
+        elif se_command == "/se:status":
+            command_status(workspace)
+        else:
+            raise SystemExit(f"不支持的 /se:* 命令：{se_command}")
+    finally:
+        release_workflow_lock(lock_path)
     print_route_reply_constraint(se_command)
+    if output_json:
+        state = validate_se_state(load_workspace_config(workspace), run_command)
+        payload = {
+            "se_command": se_command,
+            "run_command": run_command,
+            "argument": argument,
+            "result": "ok",
+            "phase": state.get("phase", ""),
+            "allowed_next": state.get("allowed_next", []),
+        }
+        try:
+            payload["session_id"] = current_session_meta(load_workspace_config(workspace)).get("session_id", "")
+        except FileNotFoundError:
+            payload["session_id"] = ""
+        print("route_result_json_begin")
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print("route_result_json_end")
 
 
 def command_route_check(workspace: Path | None, command_text: str | None) -> None:
@@ -509,13 +543,14 @@ def main() -> None:
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--force", action="store_true", help="配合 verify 使用，强制重跑验证并覆盖结果。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读摘要。")
     parser.add_argument("--explicit-se-bridge", action="store_true", help="确认本次 bootstrap-openspec 来自用户显式 /se:bridge 命令。")
     args = parser.parse_args()
 
     workspace = Path(args.workspace).expanduser() if args.workspace else None
 
     if args.command == "route-se":
-        command_route_se(workspace, args.command_text or args.change_name, args.timeout_seconds, args.force)
+        command_route_se(workspace, args.command_text or args.change_name, args.timeout_seconds, args.force, args.json)
     elif args.command == "route-check":
         command_route_check(workspace, args.command_text or args.change_name)
     elif args.command == "init":

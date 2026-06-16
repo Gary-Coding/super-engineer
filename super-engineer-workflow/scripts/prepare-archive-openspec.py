@@ -12,6 +12,7 @@ from common import (
     is_standard_workflow_notification,
     load_workspace_config,
     openspec_change_dir,
+    openspec_hash_drift,
     openspec_writeback_dir,
     collect_openspec_cli_context,
     read_json,
@@ -133,6 +134,8 @@ def main() -> None:
     acceptance_result = summary.get("acceptance_result", [])
     if any(item.get("status") != "passed" for item in acceptance_result):
         blockers.append("存在未通过的验收项")
+    hash_drifts = openspec_hash_drift(config, summary.get("openspec_hashes", {}))
+    blockers.extend(hash_drifts)
     blockers.extend(notification_blockers(config, summary))
     spec_conflicts = detect_spec_conflicts(summary)
     if spec_conflicts:
@@ -159,6 +162,7 @@ def main() -> None:
         "verify_result": summary.get("verify", {}).get("result", ""),
         "spec_impacts": summary.get("spec_impacts", []),
         "spec_conflicts": spec_conflicts,
+        "openspec_hash_drifts": hash_drifts,
         "merge_mode": merge_mode,
         "acceptance_result": acceptance_result,
         "residual_risks": summary.get("residual_risks", []),

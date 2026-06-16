@@ -107,6 +107,49 @@ def build_discovery_markdown(discovery: dict) -> str:
     return "\n".join(lines)
 
 
+def build_discovery_summary(discovery: dict) -> dict[str, object]:
+    codebase_summaries: list[dict[str, object]] = []
+    evidence: list[dict[str, object]] = []
+    total_matches = 0
+    for codebase in discovery.get("codebases", []):
+        matches = list(codebase.get("matches", []))
+        total_matches += len(matches)
+        codebase_summaries.append(
+            {
+                "name": codebase.get("name", ""),
+                "path": codebase.get("path", ""),
+                "detected_project": codebase.get("detected_project", {}),
+                "match_count": len(matches),
+                "top_files": list(dict.fromkeys(str(item.get("file", "")) for item in matches if item.get("file")))[:12],
+            }
+        )
+        for item in matches[:6]:
+            evidence.append(
+                {
+                    "codebase": codebase.get("name", ""),
+                    "keyword": item.get("keyword", ""),
+                    "file": item.get("file", ""),
+                    "line": item.get("line", 0),
+                    "snippet": item.get("snippet", ""),
+                }
+            )
+            if len(evidence) >= 20:
+                break
+    return {
+        "session_id": discovery.get("session_id", ""),
+        "source": "run-workflow.py discovery-summary",
+        "schema_version": 1,
+        "task_count": len(discovery.get("tasks", [])),
+        "keywords": discovery.get("keywords", [])[:30],
+        "service_resolution": discovery.get("service_resolution", {}),
+        "codebases": codebase_summaries,
+        "total_match_count": total_matches,
+        "evidence": evidence,
+        "planning_hints": discovery.get("planning_hints", [])[:10],
+        "created_at": discovery.get("created_at", ""),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="根据 todo 关键词定位代码证据，生成 discovery 产物。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
@@ -165,6 +208,7 @@ def main() -> None:
         "created_at": now_iso(),
     }
     write_managed_json(config, data_artifact_path(config, "discovery.json", session_meta), discovery)
+    write_managed_json(config, data_artifact_path(config, "discovery-summary.json", session_meta), build_discovery_summary(discovery))
     write_managed_text(config, report_artifact_path(config, "discovery.md", session_meta), build_discovery_markdown(discovery))
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))

@@ -124,6 +124,17 @@ def main() -> None:
 
     subparsers.add_parser("templates", help="列出内置 workspace.yml 模板。")
 
+    commands_parser = subparsers.add_parser("commands", help="安装 AI 编码工具快捷命令模板。")
+    commands_subparsers = commands_parser.add_subparsers(dest="commands_action")
+    commands_install = commands_subparsers.add_parser("install", help="安装 /se:* 快捷命令模板。")
+    commands_install.add_argument("--workspace", default=".", help="工作区目录，默认当前目录。")
+    commands_install.add_argument(
+        "--target",
+        choices=["claude", "codex", "cursor", "trae", "kimi", "all"],
+        default="claude",
+        help="目标 AI 编码工具。",
+    )
+
     template_parser = subparsers.add_parser("template", help="查看或复制内置 workspace.yml 模板。")
     template_subparsers = template_parser.add_subparsers(dest="template_action")
     template_show = template_subparsers.add_parser("show", help="打印指定模板内容。")
@@ -155,6 +166,12 @@ def main() -> None:
         raise SystemExit(exit_code)
     if args.command == "templates":
         list_templates()
+        return
+    if args.command == "commands":
+        if args.commands_action == "install":
+            install_commands(Path(args.workspace).expanduser().resolve(), args.target)
+            return
+        commands_parser.print_help()
         return
     if args.command == "template":
         if args.template_action == "show":
@@ -260,7 +277,7 @@ def copy_template(name: str, workspace: Path, demand_name: str, code_path: str, 
 def doctor(workspace: Path, output_json: bool, fix: bool = False) -> int:
     if fix:
         install_targets("both", force=True)
-        ensure_workspace_commands(workspace)
+        install_commands(workspace, "all")
 
     checks: list[dict[str, str]] = []
     add_check(checks, "platform", "ok", f"{platform.system()} {platform.release()}")
@@ -273,6 +290,7 @@ def doctor(workspace: Path, output_json: bool, fix: bool = False) -> int:
     add_check(checks, "openspec_cli", "ok" if shutil.which("openspec") else "warn", shutil.which("openspec") or "未安装")
     add_check(checks, "workspace", "ok" if workspace.exists() else "fail", str(workspace))
     add_check(checks, "workspace.commands.se", "ok" if workspace_commands_ready(workspace) else "warn", str(workspace / ".claude" / "commands" / "se"))
+    add_check(checks, "workspace.openspec.root", "ok" if (workspace / "openspec").exists() else "warn", str(workspace / "openspec"))
 
     workspace_yml = workspace / "workspace.yml"
     add_check(checks, "workspace_yml", "ok" if workspace_yml.exists() else "fail", str(workspace_yml))
@@ -308,12 +326,31 @@ def workspace_commands_ready(workspace: Path) -> bool:
 
 
 def ensure_workspace_commands(workspace: Path) -> None:
+    install_commands(workspace, "claude")
+
+
+def command_target_dirs(workspace: Path, target: str) -> list[tuple[str, Path]]:
+    home = Path.home()
+    mapping: dict[str, Path] = {
+        "claude": workspace / ".claude" / "commands" / "se",
+        "codex": Path(os.environ.get("CODEX_HOME", str(home / ".codex"))).expanduser() / "prompts",
+        "cursor": workspace / ".cursor" / "commands" / "se",
+        "trae": workspace / ".trae" / "commands" / "se",
+        "kimi": workspace / ".kimi" / "commands" / "se",
+    }
+    if target == "all":
+        return list(mapping.items())
+    return [(target, mapping[target])]
+
+
+def install_commands(workspace: Path, target: str) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
-    commands_dir = workspace / ".claude" / "commands" / "se"
-    commands_dir.mkdir(parents=True, exist_ok=True)
-    for filename, content in SE_COMMANDS.items():
-        (commands_dir / filename).write_text(content, encoding="utf-8")
-    print(f"✓ 已补齐快捷命令: {commands_dir}")
+    for name, directory in command_target_dirs(workspace, target):
+        directory.mkdir(parents=True, exist_ok=True)
+        for filename, content in SE_COMMANDS.items():
+            output_name = f"se-{filename}" if name == "codex" else filename
+            (directory / output_name).write_text(content, encoding="utf-8")
+        print(f"✓ 已补齐 {name} 快捷命令: {directory}")
 
 
 def doctor_suggestions(checks: list[dict[str, str]]) -> list[str]:
@@ -327,6 +364,8 @@ def doctor_suggestions(checks: list[dict[str, str]]) -> list[str]:
         suggestions.append("执行 `se init` 初始化工作区，或用 `se template copy <模板名>` 生成 workspace.yml。")
     if by_name.get("openspec_cli", {}).get("status") != "ok":
         suggestions.append("OpenSpec 模式建议先安装并初始化 OpenSpec；todo 模式可忽略。")
+    if by_name.get("workspace.openspec.root", {}).get("status") != "ok":
+        suggestions.append("OpenSpec 模式请在工作区执行 OpenSpec 初始化；todo 模式可忽略。")
     if by_name.get("node", {}).get("status") != "ok" or by_name.get("npm", {}).get("status") != "ok":
         suggestions.append("请先安装 Node.js/npm。")
     return suggestions

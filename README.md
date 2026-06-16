@@ -115,6 +115,7 @@ se init
 se init      # 交互式安装 skill 并初始化工作区
 se doctor    # 检查本机环境和 workspace.yml
 se doctor --fix # 同步 skill 并补齐工作区快捷命令
+se commands install --target all # 安装 Claude/Codex/Cursor/Trae/Kimi 快捷命令模板
 se templates # 查看内置 workspace.yml 模板
 se install   # 安装 skill 到 Codex / Claude
 se sync      # 强制同步最新 skill 到 Codex / Claude
@@ -131,6 +132,7 @@ se template copy openspec-auto --workspace /path/to/ai-workspace --demand-name 1
 ```
 
 模板说明见 [docs/模板使用指南.md](/Users/muke/Documents/personal/codex/super-engineer/docs/模板使用指南.md)。
+跨平台支持说明见 [docs/跨平台支持矩阵.md](/Users/muke/Documents/personal/codex/super-engineer/docs/跨平台支持矩阵.md)。
 
 本地源码开发时，也可以直接使用引导脚本。默认是一步一步的交互式向导：
 

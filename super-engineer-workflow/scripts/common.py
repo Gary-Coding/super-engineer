@@ -23,6 +23,61 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def workflow_lock_path(config: dict[str, Any]) -> Path:
+    return artifacts_dir(config) / "workflow.lock"
+
+
+def process_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def acquire_workflow_lock(config: dict[str, Any], command: str, stale_seconds: int = 1800) -> Path:
+    ensure_runtime_dirs(config)
+    path = workflow_lock_path(config)
+    payload = {
+        "pid": os.getpid(),
+        "command": command,
+        "created_at": now_iso(),
+    }
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    try:
+        fd = os.open(str(path), flags)
+    except FileExistsError:
+        existing = read_json(path, {})
+        pid = int(existing.get("pid", 0) or 0) if isinstance(existing, dict) else 0
+        created_at = parse_iso_datetime(str(existing.get("created_at", ""))) if isinstance(existing, dict) else None
+        age = (datetime.now(timezone.utc) - created_at).total_seconds() if created_at else stale_seconds + 1
+        if age > stale_seconds or not process_is_running(pid):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            return acquire_workflow_lock(config, command, stale_seconds=stale_seconds)
+        raise RuntimeError(
+            f"检测到工作流正在执行：pid={pid}, command={existing.get('command', '') if isinstance(existing, dict) else ''}。"
+            "请等待当前命令结束后重试。"
+        )
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return path
+
+
+def release_workflow_lock(path: Path | None) -> None:
+    if not path:
+        return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def parse_iso_datetime(value: str) -> datetime | None:
     normalized = str(value).strip()
     if not normalized:
@@ -846,6 +901,65 @@ def openspec_tasks_hash(config: dict[str, Any]) -> str:
     if workflow_source(config) != "openspec":
         return ""
     return file_sha256(openspec_tasks_path(config))
+
+
+def openspec_artifact_hashes(config: dict[str, Any]) -> dict[str, Any]:
+    if workflow_source(config) != "openspec":
+        return {}
+    result: dict[str, Any] = {}
+    openspec = config.get("openspec", {})
+    for key in ("proposal_file", "design_file", "tasks_file"):
+        path_text = str(openspec.get(key, "")).strip()
+        if not path_text:
+            continue
+        path = Path(path_text)
+        if path.exists() and path.is_file():
+            result[key.replace("_file", "")] = {
+                "path": str(path.resolve()),
+                "sha256": file_sha256(path),
+            }
+    specs: list[dict[str, str]] = []
+    specs_dir_text = str(openspec.get("specs_dir", "")).strip()
+    if specs_dir_text:
+        specs_dir = Path(specs_dir_text)
+        if specs_dir.exists() and specs_dir.is_dir():
+            for path in sorted(specs_dir.rglob("*.md")):
+                specs.append(
+                    {
+                        "path": str(path.resolve()),
+                        "relative_path": str(path.relative_to(specs_dir)),
+                        "sha256": file_sha256(path),
+                    }
+                )
+    result["specs"] = specs
+    return result
+
+
+def openspec_hash_drift(config: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
+    current = openspec_artifact_hashes(config)
+    drifts: list[str] = []
+    for key in ("proposal", "design", "tasks"):
+        old_item = baseline.get(key, {}) if isinstance(baseline, dict) else {}
+        new_item = current.get(key, {}) if isinstance(current, dict) else {}
+        old_hash = str(old_item.get("sha256", "")).strip() if isinstance(old_item, dict) else ""
+        new_hash = str(new_item.get("sha256", "")).strip() if isinstance(new_item, dict) else ""
+        if old_hash and new_hash and old_hash != new_hash:
+            drifts.append(f"{key}.md 自执行回写后已变化")
+    old_specs = {
+        str(item.get("relative_path", "")): str(item.get("sha256", ""))
+        for item in baseline.get("specs", [])
+        if isinstance(item, dict)
+    } if isinstance(baseline, dict) else {}
+    new_specs = {
+        str(item.get("relative_path", "")): str(item.get("sha256", ""))
+        for item in current.get("specs", [])
+        if isinstance(item, dict)
+    } if isinstance(current, dict) else {}
+    for rel, old_hash in old_specs.items():
+        new_hash = new_specs.get(rel, "")
+        if old_hash and new_hash and old_hash != new_hash:
+            drifts.append(f"specs/{rel} 自执行回写后已变化")
+    return drifts
 
 
 def _se_state_artifact_exists(path_text: str) -> bool:

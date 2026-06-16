@@ -10,6 +10,7 @@ from common import (
     format_duration,
     load_workspace_config,
     now_iso,
+    openspec_artifact_hashes,
     openspec_bridge_context_path,
     openspec_change_dir,
     openspec_writeback_dir,
@@ -265,6 +266,7 @@ def main() -> None:
     if str(status.get("phase", "")).strip() != "done":
         archive_blockers.append(f"当前状态不是 done：{status.get('phase', '')}")
 
+    mapping = task_mapping(plan, verify, todo_text)
     payload = {
         "change_name": str(config.get("openspec", {}).get("change_name", "")),
         "change_dir": str(openspec_change_dir(config)),
@@ -295,7 +297,8 @@ def main() -> None:
             "sections": verify.get("sections", []),
         },
         "acceptance_result": summarize_acceptance(plan, verify),
-        "task_mapping": task_mapping(plan, verify, todo_text),
+        "task_mapping": mapping,
+        "openspec_hashes": openspec_artifact_hashes(config),
         "spec_impacts": infer_spec_impacts(plan, plan_bridge_context),
         "residual_risks": residual_risks(plan, review, verify),
         "manual_decisions": [],
@@ -310,6 +313,7 @@ def main() -> None:
 
     output_dir = openspec_writeback_dir(config)
     write_managed_json(config, output_dir / "execution-summary.json", payload)
+    write_managed_json(config, output_dir / "task-mapping.json", {"source": "run-workflow.py writeback-openspec", "items": mapping})
     write_managed_text(config, output_dir / "execution-summary.md", build_markdown(payload))
     print(f"writeback_dir={output_dir}")
     print(f"change_dir={openspec_change_dir(config)}")

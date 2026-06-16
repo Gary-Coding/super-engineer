@@ -71,6 +71,8 @@ For mode and artifact details, use [references/workflow.md](references/workflow.
 - `reference_files` are strong context, but scripts summarize large files by default; read full files only when necessary for the current command.
 - In OpenSpec mode, avoid rereading `proposal.md`, `design.md`, and `specs/**/*.md` unless the current stage needs them.
 - Prefer `plan-summary.json` for downstream context; use `plan.json` only when detailed planning data is required.
+- Prefer `discovery-summary.json` over `discovery.json`; read full discovery only for detailed code evidence.
+- Prefer `route-se --json` when a machine-readable execution summary is useful.
 - Final replies should be compact. Detailed reports belong in `output_dir/<session_id>/`.
 
 ## State Summary
@@ -89,6 +91,7 @@ Todo mode uses current session `status.json` and `todo-state.json`; do not write
 
 - Preflight router: `python3 scripts/run-workflow.py route-check --command-text "<command>"`
 - Main router: `python3 scripts/run-workflow.py route-se --command-text "<command>"`
+- JSON router summary: `python3 scripts/run-workflow.py route-se --command-text "<command>" --json`
 - Status: `python3 scripts/run-workflow.py status`
 - Plan: `python3 scripts/run-workflow.py plan`
 - Review: `python3 scripts/run-workflow.py review`

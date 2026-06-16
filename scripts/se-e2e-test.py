@@ -64,6 +64,15 @@ def test_templates_cli(root: Path) -> None:
     run(["node", str(CLI), "doctor", "--workspace", str(workspace), "--fix"], check=False)
     if not (workspace / ".claude" / "commands" / "se" / "apply.md").exists():
         raise AssertionError("doctor --fix should create se command templates")
+    run(["node", str(CLI), "commands", "install", "--workspace", str(workspace), "--target", "all"])
+    for command_path in [
+        workspace / ".cursor" / "commands" / "se" / "apply.md",
+        workspace / ".trae" / "commands" / "se" / "apply.md",
+        workspace / ".kimi" / "commands" / "se" / "apply.md",
+        home_prompt(root) / "se-apply.md",
+    ]:
+        if not command_path.exists():
+            raise AssertionError(f"commands install all missing {command_path}")
 
 
 def test_openspec_state_and_bridge(root: Path) -> None:
@@ -238,6 +247,9 @@ def test_openspec_state_and_bridge(root: Path) -> None:
         raise AssertionError("first /se:plan should create a session")
     first_session = read_json(workspace / ".super-engineer" / "current-session.json")
     first_session_id = first_session["session_id"]
+    data_dir = Path(first_session["data_dir"])
+    if not (data_dir / "discovery-summary.json").exists():
+        raise AssertionError("plan should create discovery-summary.json")
 
     second_plan = run(
         [
@@ -269,6 +281,21 @@ def test_openspec_state_and_bridge(root: Path) -> None:
     )
     if "apply_phase=implementing" not in apply_output:
         raise AssertionError("/se:apply should enter implementing after planned session")
+    apply_json_output = run(
+        [
+            sys.executable,
+            str(RUN_WORKFLOW),
+            "route-se",
+            "--workspace",
+            str(workspace),
+            "--command-text",
+            "/se:apply",
+            "--json",
+        ],
+        check=False,
+    )
+    if "route_result_json_begin" not in apply_json_output.output and "当前状态不允许进入实现" not in apply_json_output.output:
+        raise AssertionError("route-se --json should emit JSON summary or a state guard")
     blocked_plan = run(
         [
             sys.executable,
@@ -476,6 +503,10 @@ def run(command: list[str], check: bool = True, env: dict[str, str] | None = Non
             raise SystemExit(result.returncode)
         return result.stdout
     return CommandResult(result.returncode, result.stdout)
+
+
+def home_prompt(root: Path) -> Path:
+    return root / "home" / ".codex" / "prompts"
 
 
 class CommandResult:
