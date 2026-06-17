@@ -2,7 +2,7 @@
 
 本文档用于指导 AI 将当前 `super-engineer-workflow` 重构为新的开源品牌项目 **SpecTrace**。
 
-重构目标不是简单改名，而是将现有 skill 收敛为 **SpecTrace Delivery**，同时为未来的需求梳理阶段和测试阶段预留清晰扩展边界。
+重构目标不是简单改名，而是将现有 skill 收敛为 **SpecTrace RD**，同时为未来的需求梳理阶段和测试阶段预留清晰扩展边界。
 
 ## 1. 品牌与定位
 
@@ -33,13 +33,13 @@ SpecTrace 把需求和规格转化为可追踪的 AI 软件交付变更。
 当前阶段先实现：
 
 ```text
-SpecTrace Delivery
+SpecTrace RD
 ```
 
-当前 Delivery 定位：
+当前 RD 定位：
 
 ```text
-SpecTrace Delivery turns requirements and specs into traceable AI-delivered software changes through planning, implementation, review, verification, handoff, and archive checks.
+SpecTrace RD turns requirements and specs into traceable AI-delivered software changes through planning, implementation, review, verification, handoff, and archive checks.
 ```
 
 ## 2. 三阶段 Skill 命名
@@ -50,24 +50,24 @@ SpecTrace 是一个 suite，不是单个大 skill。
 
 ```text
 SpecTrace Suite
-├── SpecTrace Intake
-├── SpecTrace Delivery
+├── SpecTrace PM
+├── SpecTrace RD
 └── SpecTrace QA
 ```
 
 | 阶段 | Skill 名称 | 作用 | 当前状态 |
 | --- | --- | --- | --- |
-| 需求阶段 | `SpecTrace Intake` | 需求梳理、澄清、业务规则、验收标准、可选生成 OpenSpec 前置材料 | 预留 |
-| 开发交付阶段 | `SpecTrace Delivery` | 计划、实现、自查、审查、验证、交付报告、OpenSpec 回写和归档检查 | 当前实现 |
+| 产品需求阶段 | `SpecTrace PM` | 需求梳理、澄清、业务规则、验收标准、可选生成 OpenSpec 前置材料 | 预留 |
+| 研发交付阶段 | `SpecTrace RD` | 计划、实现、自查、审查、验证、交付报告、OpenSpec 回写和归档检查 | 当前实现 |
 | 测试阶段 | `SpecTrace QA` | 测试计划、测试用例、测试执行、缺陷反馈、回归清单、测试报告 | 预留 |
 
-不要使用以下命名：
+命名说明：
 
-- `SpecTrace Product`
-- `SpecTrace Requirement`
-- `SpecTrace Test`
+- `PM` = Product Manager / 产品经理。
+- `RD` = Research & Development / 研发工程师。
+- `QA` = Quality Assurance / 质量保证工程师。
 
-原因：这些名称过于角色化或范围过窄。`Intake / Delivery / QA` 更适合表达工作流阶段。
+这三个缩写贴近企业真实协作角色，同时保持统一品牌前缀。
 
 ## 3. 新项目组织
 
@@ -88,9 +88,9 @@ spectrace/
 ├── bin/
 │   └── spectrace.js
 ├── skills/
-│   ├── spectrace-intake/
+│   ├── spectrace-pm/
 │   │   └── SKILL.md
-│   ├── spectrace-delivery/
+│   ├── spectrace-rd/
 │   │   ├── SKILL.md
 │   │   ├── references/
 │   │   └── scripts/
@@ -107,9 +107,9 @@ spectrace/
 
 当前重构优先级：
 
-1. 完成 `spectrace-delivery`。
-2. 预留 `spectrace-intake` 和 `spectrace-qa` 的最小 `SKILL.md`。
-3. 共享 workspace 协议先设计好，但 Intake / QA 逻辑不展开实现。
+1. 完成 `spectrace-rd`。
+2. 预留 `spectrace-pm` 和 `spectrace-qa` 的最小 `SKILL.md`。
+3. 共享 workspace 协议先设计好，但 PM / QA 逻辑不展开实现。
 
 ## 4. 包名、CLI 与命令前缀
 
@@ -141,7 +141,7 @@ st
 
 ## 5. 三阶段命令规划
 
-### 5.1 SpecTrace Intake，预留
+### 5.1 SpecTrace PM，预留
 
 ```text
 /st:intake
@@ -157,7 +157,7 @@ st
 | `/st:spec` | 生成结构化需求规格，可选生成 OpenSpec 前置材料 |
 | `/st:acceptance` | 生成验收标准和业务规则清单 |
 
-### 5.2 SpecTrace Delivery，当前实现
+### 5.2 SpecTrace RD，当前实现
 
 ```text
 /st:propose <change-name>
@@ -377,8 +377,8 @@ spectrace git stage add-phone-filter --stage delivery
 
 | 当前路径 / 名称 | 新路径 / 名称 |
 | --- | --- |
-| `super-engineer-workflow/` | `skills/spectrace-delivery/` |
-| `super-engineer-workflow/SKILL.md` | `skills/spectrace-delivery/SKILL.md` |
+| `super-engineer-workflow/` | `skills/spectrace-rd/` |
+| `super-engineer-workflow/SKILL.md` | `skills/spectrace-rd/SKILL.md` |
 | `/se:*` | `/st:*` |
 | `se` CLI | `spectrace` CLI，短别名 `st` |
 | `.super-engineer/` | `.spectrace/` |
@@ -389,7 +389,7 @@ spectrace git stage add-phone-filter --stage delivery
 
 迁移时不要保留双协议入口。新项目只实现 `/st:*`。
 
-## 10. Delivery 阶段必须保留的能力
+## 10. RD 阶段必须保留的能力
 
 以下能力来自当前 skill，迁移后必须保留：
 
@@ -477,14 +477,14 @@ npm run pack:check
 
 - npm 包名为 `@gary-coding/spectrace`。
 - CLI 支持 `spectrace version` 和 `st version`。
-- skill 名称为 `spectrace-delivery`。
+- skill 名称为 `spectrace-rd`。
 - 新项目不包含 `super-engineer-workflow` 字样。
 - 新项目不包含 `/se:*` 协议入口。
 - 新项目不包含 `.super-engineer` 运行目录。
 - 新项目默认使用 `.spectrace`。
 - README 不包含作者本机绝对路径。
 - README 明确说明与 OpenSpec 的关系。
-- E2E 覆盖至少一个 `openspec + auto` delivery 流程。
+- E2E 覆盖至少一个 `openspec + auto` RD 流程。
 - E2E 覆盖多个 demand 并行时无参命令被拒绝。
 
 ## 14. 分阶段实施建议
@@ -492,7 +492,7 @@ npm run pack:check
 ### 阶段 1：品牌和目录重构
 
 - 新建 `spectrace` 仓库。
-- 迁移当前核心代码到 `skills/spectrace-delivery/`。
+- 迁移当前核心代码到 `skills/spectrace-rd/`。
 - 改包名、CLI、skill 名和 README。
 - `/se:*` 全部替换为 `/st:*`。
 
@@ -509,9 +509,9 @@ npm run pack:check
 - 增加 `spectrace git summary/stage`。
 - 文档明确一个需求一个 Git 分支。
 
-### 阶段 4：预留 Intake / QA
+### 阶段 4：预留 PM / QA
 
-- 增加 `skills/spectrace-intake/SKILL.md`。
+- 增加 `skills/spectrace-pm/SKILL.md`。
 - 增加 `skills/spectrace-qa/SKILL.md`。
 - 暂不实现复杂逻辑，只声明阶段边界、输入输出和未来命令。
 
