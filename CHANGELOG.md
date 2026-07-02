@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8
+
+- 更新 README 和文档链接展示，优化 npm 包首页阅读体验。
+- 增加 SpecTrace 重构规划文档，并统一相关角色命名。
+
 ## 0.1.7
 
 - 拆分 `/se:*` 协议到 `references/commands/*`，删除旧单体协议入口，AI 按命令读取最小协议上下文，降低固定 token 消耗。
