@@ -15,6 +15,7 @@ from common import (
     acquire_workflow_lock,
     ensure_plan_can_run,
     ensure_status,
+    human_report_artifact,
     load_workspace_config,
     now_iso,
     parse_se_command,
@@ -24,7 +25,6 @@ from common import (
     read_se_state,
     release_workflow_lock,
     require_se_state,
-    report_artifact_path,
     recover_se_state_from_artifacts,
     todo_path,
     update_se_state,
@@ -140,6 +140,11 @@ def command_status(workspace: Path | None) -> None:
         print(f"standard_session={str(bool(standard.get('valid'))).lower()}")
         for error in standard.get("errors", []):
             print(f"standard_error={error}")
+
+
+def report_artifact_entry(config: dict, section: str) -> dict[str, str]:
+    key, path = human_report_artifact(config, section)
+    return {key: str(path)}
 
 
 def command_assert_standard_session(workspace: Path | None, require_notification: bool = False) -> None:
@@ -386,7 +391,7 @@ def command_plan(workspace: Path | None) -> None:
         artifacts={
             "todo": str(todo_path(config)),
             "plan_json": str(data_artifact_path(config, "plan.json")),
-            "plan_md": str(report_artifact_path(config, "plan.md")),
+            **report_artifact_entry(config, "plan"),
         },
     )
 
@@ -427,7 +432,7 @@ def command_finish_implement(workspace: Path | None) -> None:
         last_command="/se:apply",
         artifacts={
             "self_check_json": str(data_artifact_path(config, "self-check.json")),
-            "self_check_md": str(report_artifact_path(config, "self-check.md")),
+            **report_artifact_entry(config, "self-check"),
         },
     )
     if config["mode"] == "manual":
@@ -473,7 +478,7 @@ def command_review(workspace: Path | None) -> None:
         last_command="/se:review",
         artifacts={
             "review_json": str(data_artifact_path(config, "review.json")),
-            "review_md": str(report_artifact_path(config, "review.md")),
+            **report_artifact_entry(config, "review"),
         },
     )
     if workflow_source(config) == "openspec":
@@ -502,7 +507,7 @@ def command_verify(workspace: Path | None, timeout_seconds: int, force: bool = F
         last_command="/se:verify",
         artifacts={
             "verify_json": str(data_artifact_path(config, "verify.json")),
-            "verify_md": str(report_artifact_path(config, "verify.md")),
+            **report_artifact_entry(config, "verify"),
             "notification_json": str(data_artifact_path(config, "notification.json")),
         },
         blocked_reason="" if next_phase in ("verified", "done") else result_text or status_result.get("current_task", "") or "验证未通过",

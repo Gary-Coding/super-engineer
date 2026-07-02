@@ -21,10 +21,9 @@ from common import (
     phase_after,
     planned_codebases,
     read_json,
-    report_artifact_path,
     workflow_duration_seconds,
     write_managed_json,
-    write_managed_text,
+    write_human_report_section,
     workspace_root,
 )
 
@@ -112,12 +111,12 @@ def summarize_stdout(stdout_text: str) -> list[str]:
 
 def write_report(
     config: dict,
-    output: Path,
     sections: list[dict],
     checks: list[str],
     result: str,
     verify_duration: float,
     workflow_duration: float,
+    session_meta: dict,
 ) -> None:
     lines = [
         "# 验证结果",
@@ -172,7 +171,7 @@ def write_report(
     else:
         lines.append("- 请根据失败输出修复问题后重新执行验证。")
     lines.append("")
-    write_managed_text(config, output, "\n".join(lines))
+    write_human_report_section(config, "verify", "\n".join(lines), session_meta)
 
 
 def merge_result(current: str, new: str) -> str:
@@ -262,7 +261,7 @@ def finalize_status(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="执行验证命令并生成 verify.md。")
+    parser = argparse.ArgumentParser(description="执行验证命令并生成验证报告。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--force", action="store_true", help="即使当前会话已完成，也强制重新执行验证并覆盖结果。")
@@ -354,12 +353,12 @@ def main() -> None:
         workflow_duration = workflow_duration_seconds(session_meta, status_for_duration, now_iso())
         write_report(
             config,
-            report_artifact_path(config, "verify.md", session_meta),
             sections,
             plan.get("test_plan", []),
             overall_result,
             duration,
             workflow_duration,
+            session_meta,
         )
         write_managed_json(
             config,
@@ -394,12 +393,12 @@ def main() -> None:
         workflow_duration = workflow_duration_seconds(session_meta, status_for_duration, now_iso())
         write_report(
             config,
-            report_artifact_path(config, "verify.md", session_meta),
             sections,
             plan.get("test_plan", []),
             "超时",
             duration,
             workflow_duration,
+            session_meta,
         )
         write_managed_json(
             config,

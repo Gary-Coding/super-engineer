@@ -13,7 +13,7 @@
 1. 先执行公共 `route-check`。
 2. 再执行：
    `python3 scripts/run-workflow.py route-se --command-text "/se:plan"`
-3. 脚本生成 `discovery.json`、`plan.json`、`plan-summary.json`、`plan.md`。
+3. 脚本生成 `discovery.json`、`plan.json`、`plan-summary.json`；`manual` 模式生成 `discovery.md` / `plan.md`，`auto` 模式更新 `workflow-report.md`。
 4. 如果已有可复用计划 session，必须复用，不能新建空 session。
 
 ## 禁止

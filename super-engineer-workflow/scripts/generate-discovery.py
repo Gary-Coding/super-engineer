@@ -18,12 +18,11 @@ from common import (
     read_json,
     read_text,
     relative_to,
-    report_artifact_path,
     resolve_target_codebases,
     todo_path,
     workspace_root,
     write_managed_json,
-    write_managed_text,
+    write_human_report_section,
 )
 
 
@@ -209,7 +208,7 @@ def main() -> None:
     }
     write_managed_json(config, data_artifact_path(config, "discovery.json", session_meta), discovery)
     write_managed_json(config, data_artifact_path(config, "discovery-summary.json", session_meta), build_discovery_summary(discovery))
-    write_managed_text(config, report_artifact_path(config, "discovery.md", session_meta), build_discovery_markdown(discovery))
+    write_human_report_section(config, "discovery", build_discovery_markdown(discovery), session_meta)
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
     status.update(

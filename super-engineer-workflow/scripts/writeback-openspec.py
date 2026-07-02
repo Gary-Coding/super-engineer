@@ -8,6 +8,8 @@ from common import (
     current_session_meta,
     data_artifact_path,
     format_duration,
+    human_report_artifacts,
+    human_report_display_name,
     load_workspace_config,
     now_iso,
     openspec_artifact_hashes,
@@ -16,7 +18,6 @@ from common import (
     openspec_writeback_dir,
     read_json,
     read_text,
-    report_artifact_path,
     todo_path,
     workflow_source,
     workspace_root,
@@ -216,10 +217,11 @@ def build_markdown(payload: dict) -> str:
     lines.extend([
         "",
         "## Links",
-        f"- plan.md: {payload.get('reports', {}).get('plan_md', '')}",
-        f"- review.md: {payload.get('reports', {}).get('review_md', '')}",
-        f"- verify.md: {payload.get('reports', {}).get('verify_md', '')}",
     ])
+    reports = payload.get("reports", {})
+    if isinstance(reports, dict):
+        for key, value in reports.items():
+            lines.append(f"- {human_report_display_name(str(key))}: {value}")
     lines.append("")
     return "\n".join(lines)
 
@@ -304,11 +306,7 @@ def main() -> None:
         "manual_decisions": [],
         "review_summary": summarize_review(review),
         "verify_summary": summarize_verify(verify),
-        "reports": {
-            "plan_md": str(report_artifact_path(config, "plan.md", session_meta)),
-            "review_md": str(report_artifact_path(config, "review.md", session_meta)),
-            "verify_md": str(report_artifact_path(config, "verify.md", session_meta)),
-        },
+        "reports": human_report_artifacts(config, session_meta),
     }
 
     output_dir = openspec_writeback_dir(config)

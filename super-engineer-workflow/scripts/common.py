@@ -779,6 +779,100 @@ def report_artifact_path(config: dict[str, Any], name: str, session_meta: dict[s
     return Path(meta["report_dir"]) / name
 
 
+REPORT_SECTION_TITLES = {
+    "discovery": "上下文定位",
+    "plan": "变更计划",
+    "self-check": "实现自查",
+    "review": "代码审查",
+    "verify": "验证结果",
+}
+
+
+def workflow_report_path(config: dict[str, Any], session_meta: dict[str, Any] | None = None) -> Path:
+    return report_artifact_path(config, "workflow-report.md", session_meta)
+
+
+def report_filename_for_section(section: str) -> str:
+    return f"{section}.md"
+
+
+def human_report_artifact(config: dict[str, Any], section: str, session_meta: dict[str, Any] | None = None) -> tuple[str, Path]:
+    if str(config.get("mode", "manual")).strip() == "auto":
+        return "workflow_report", workflow_report_path(config, session_meta)
+    filename = report_filename_for_section(section)
+    key = filename.replace("-", "_").replace(".", "_")
+    return key, report_artifact_path(config, filename, session_meta)
+
+
+def human_report_artifacts(config: dict[str, Any], session_meta: dict[str, Any] | None = None) -> dict[str, str]:
+    if str(config.get("mode", "manual")).strip() == "auto":
+        return {"workflow_report": str(workflow_report_path(config, session_meta))}
+    return {
+        "discovery_md": str(report_artifact_path(config, "discovery.md", session_meta)),
+        "plan_md": str(report_artifact_path(config, "plan.md", session_meta)),
+        "self_check_md": str(report_artifact_path(config, "self-check.md", session_meta)),
+        "review_md": str(report_artifact_path(config, "review.md", session_meta)),
+        "verify_md": str(report_artifact_path(config, "verify.md", session_meta)),
+    }
+
+
+def human_report_display_name(key: str) -> str:
+    names = {
+        "workflow_report": "workflow-report.md",
+        "discovery_md": "discovery.md",
+        "plan_md": "plan.md",
+        "self_check_md": "self-check.md",
+        "review_md": "review.md",
+        "verify_md": "verify.md",
+    }
+    return names.get(key, key)
+
+
+def write_workflow_report_section(
+    config: dict[str, Any],
+    section: str,
+    content: str,
+    session_meta: dict[str, Any] | None = None,
+) -> None:
+    meta = _normalize_session_meta(config, session_meta or current_session_meta(config))
+    path = workflow_report_path(config, meta)
+    start = f"<!-- se:{section}:start -->"
+    end = f"<!-- se:{section}:end -->"
+    existing = path.read_text(encoding="utf-8") if path.exists() else f"# 工作流报告\n\n会话：`{meta['session_id']}`\n"
+    content_lines = content.strip().splitlines()
+    if content_lines and content_lines[0].startswith("# "):
+        content_lines = content_lines[1:]
+        if content_lines and not content_lines[0].strip():
+            content_lines = content_lines[1:]
+    body = "\n".join(content_lines).strip()
+    block = f"{start}\n\n## {REPORT_SECTION_TITLES.get(section, section)}\n\n{body}\n\n{end}\n"
+    if start in existing and end in existing:
+        before = existing.split(start, 1)[0].rstrip()
+        after = existing.split(end, 1)[1].lstrip()
+        updated = f"{before}\n\n{block}\n{after}".rstrip() + "\n"
+    else:
+        updated = existing.rstrip() + "\n\n" + block
+    write_managed_text(config, path, updated)
+
+
+def write_human_report_section(
+    config: dict[str, Any],
+    section: str,
+    content: str,
+    session_meta: dict[str, Any] | None = None,
+) -> None:
+    if str(config.get("mode", "manual")).strip() == "auto":
+        write_workflow_report_section(config, section, content, session_meta)
+        return
+    write_managed_text(config, report_artifact_path(config, report_filename_for_section(section), session_meta), content.rstrip() + "\n")
+
+
+def human_report_label(config: dict[str, Any], section: str = "") -> str:
+    if str(config.get("mode", "manual")).strip() == "auto":
+        return "workflow-report.md"
+    return report_filename_for_section(section) if section else "阶段报告"
+
+
 def workspace_relative_path(config: dict[str, Any], path: Path | str) -> str:
     resolved = Path(str(path)).resolve()
     root = Path(str(config.get("__workspace_root", ""))).resolve()
@@ -1130,22 +1224,26 @@ def recover_se_state_from_artifacts(config: dict[str, Any]) -> dict[str, Any]:
         notification_path = data_artifact_path(config, "notification.json", session_meta)
         if plan_path.exists():
             artifacts["plan_json"] = str(plan_path)
-            artifacts["plan_md"] = str(report_artifact_path(config, "plan.md", session_meta))
+            key, path = human_report_artifact(config, "plan", session_meta)
+            artifacts[key] = str(path)
             phase = "planned"
             last_command = "/se:plan"
         if self_check_path.exists():
             artifacts["self_check_json"] = str(self_check_path)
-            artifacts["self_check_md"] = str(report_artifact_path(config, "self-check.md", session_meta))
+            key, path = human_report_artifact(config, "self-check", session_meta)
+            artifacts[key] = str(path)
             phase = "self_checked"
             last_command = "/se:apply"
         if review_path.exists():
             artifacts["review_json"] = str(review_path)
-            artifacts["review_md"] = str(report_artifact_path(config, "review.md", session_meta))
+            key, path = human_report_artifact(config, "review", session_meta)
+            artifacts[key] = str(path)
             phase = "reviewed"
             last_command = "/se:review"
         if verify_path.exists():
             artifacts["verify_json"] = str(verify_path)
-            artifacts["verify_md"] = str(report_artifact_path(config, "verify.md", session_meta))
+            key, path = human_report_artifact(config, "verify", session_meta)
+            artifacts[key] = str(path)
             artifacts["notification_json"] = str(notification_path)
             verify = read_json(verify_path, {})
             status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
@@ -3228,10 +3326,11 @@ def build_feishu_notification_payload(
     status_emoji = "✅" if overall_result == "通过" else "❌"
     header_template = "green" if overall_result == "通过" else "red"
     reports = {
-        "plan.md": workspace_relative_path(config, report_artifact_path(config, "plan.md", session_meta)),
-        "review.md": workspace_relative_path(config, report_artifact_path(config, "review.md", session_meta)),
-        "verify.md": workspace_relative_path(config, report_artifact_path(config, "verify.md", session_meta)),
+        key: workspace_relative_path(config, path)
+        for key, path in human_report_artifacts(config, session_meta).items()
     }
+    report_names = " / ".join(human_report_display_name(name) for name in reports)
+    report_lines = "\n".join(f"- {human_report_display_name(key)}：`{value}`" for key, value in reports.items())
     return {
         "msg_type": "interactive",
         "card": {
@@ -3280,7 +3379,7 @@ def build_feishu_notification_payload(
                             f"- 阶段：`{phase_text}`\n"
                             f"- 说明：{current_task or '暂无'}\n"
                             f"- 通知来源：`super-engineer verify`\n"
-                            f"- 报告：`plan.md` / `review.md` / `verify.md`"
+                            f"- 报告：`{report_names}`"
                         ),
                         "text_align": "left",
                         "text_size": "normal_v2",
@@ -3289,9 +3388,7 @@ def build_feishu_notification_payload(
                         "tag": "markdown",
                         "content": (
                             "**报告路径**\n"
-                            f"- plan：`{reports['plan.md']}`\n"
-                            f"- review：`{reports['review.md']}`\n"
-                            f"- verify：`{reports['verify.md']}`"
+                            f"{report_lines}"
                         ),
                         "text_align": "left",
                         "text_size": "normal_v2",

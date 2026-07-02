@@ -170,11 +170,15 @@ skill 自身配置位于：
 给人查看的报告：
 
 ```text
+manual 模式：
 <output_dir>/<session_id>/discovery.md
 <output_dir>/<session_id>/plan.md
 <output_dir>/<session_id>/self-check.md
 <output_dir>/<session_id>/review.md
 <output_dir>/<session_id>/verify.md
+
+auto 模式：
+<output_dir>/<session_id>/workflow-report.md
 ```
 
 OpenSpec 模式额外产物：

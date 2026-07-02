@@ -134,11 +134,8 @@ OpenSpec change 名称必须通过 `/se:propose <change-name>` 显式指定。�
 
 给人查看的 Markdown 产物统一写到输出目录：
 
-- `<output_dir>/<session_id>/discovery.md`
-- `<output_dir>/<session_id>/plan.md`
-- `<output_dir>/<session_id>/self-check.md`
-- `<output_dir>/<session_id>/review.md`
-- `<output_dir>/<session_id>/verify.md`
+- `manual` 模式：`discovery.md`、`plan.md`、`self-check.md`、`review.md`、`verify.md`
+- `auto` 模式：`workflow-report.md`
 
 会话附加产物：
 

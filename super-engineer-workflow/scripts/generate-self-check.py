@@ -13,10 +13,10 @@ from common import (
     now_iso,
     planned_codebases,
     read_json,
-    report_artifact_path,
+    human_report_label,
     workspace_root,
     write_managed_json,
-    write_managed_text,
+    write_human_report_section,
 )
 
 
@@ -46,7 +46,7 @@ def changed_files(path: Path) -> list[str]:
     return files
 
 
-def build_self_check(plan: dict, sections: list[dict]) -> dict:
+def build_self_check(config: dict, plan: dict, sections: list[dict]) -> dict:
     findings: list[dict] = []
     plan_files = set(str(item) for item in plan.get("impacted_files", []))
     changed = {item for section in sections for item in section.get("changed_files", [])}
@@ -87,7 +87,7 @@ def build_self_check(plan: dict, sections: list[dict]) -> dict:
             {
                 "severity": "warning",
                 "title": "应用代码改动缺少测试改动",
-                "detail": "如果本轮改动无法自动化测试，需要在 verify.md 中补充人工验证项。",
+                "detail": f"如果本轮改动无法自动化测试，需要在 {human_report_label(config, 'verify')} 中补充人工验证项。",
                 "blocking": False,
             }
         )
@@ -151,7 +151,7 @@ def main() -> None:
                 "changed_files": changed_files(codebase) if is_git_repo(codebase) else [],
             }
         )
-    self_check = build_self_check(plan, sections)
+    self_check = build_self_check(config, plan, sections)
     payload = {
         "session_id": session_meta["session_id"],
         "source": "run-workflow.py self-check",
@@ -162,7 +162,7 @@ def main() -> None:
         "created_at": now_iso(),
     }
     write_managed_json(config, data_artifact_path(config, "self-check.json", session_meta), payload)
-    write_managed_text(config, report_artifact_path(config, "self-check.md", session_meta), build_markdown(self_check, sections))
+    write_human_report_section(config, "self-check", build_markdown(self_check, sections), session_meta)
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
     status.update(
@@ -178,7 +178,7 @@ def main() -> None:
     )
     write_managed_json(config, data_artifact_path(config, "status.json", session_meta), status)
     if self_check["result"] == "blocked":
-        raise SystemExit("实现自查发现阻塞项，请查看 self-check.md。")
+        raise SystemExit(f"实现自查发现阻塞项，请查看 {human_report_label(config, 'self-check')}。")
 
 
 if __name__ == "__main__":

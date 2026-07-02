@@ -14,10 +14,10 @@ from common import (
     phase_after,
     planned_codebases,
     read_json,
-    report_artifact_path,
+    human_report_label,
     workspace_root,
     write_managed_json,
-    write_managed_text,
+    write_human_report_section,
 )
 
 
@@ -226,7 +226,7 @@ def build_review_markdown(plan: dict, sections: list[dict], findings: list[dict[
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="基于计划和真实代码差异生成 review.md。")
+    parser = argparse.ArgumentParser(description="基于计划和真实代码差异生成代码审查报告。")
     parser.add_argument("--workspace", help="工作空间路径，默认读取当前目录")
     args = parser.parse_args()
 
@@ -276,11 +276,7 @@ def main() -> None:
             "created_at": now_iso(),
         },
     )
-    write_managed_text(
-        config,
-        report_artifact_path(config, "review.md", session_meta),
-        build_review_markdown(plan, sections, findings) + "\n",
-    )
+    write_human_report_section(config, "review", build_review_markdown(plan, sections, findings), session_meta)
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
     phase, awaiting_confirmation, pending_for, next_action = phase_after("review", config["mode"])
@@ -305,7 +301,7 @@ def main() -> None:
     )
     write_managed_json(config, data_artifact_path(config, "status.json", session_meta), status)
     if review_result == "blocked":
-        raise SystemExit("代码审查发现阻塞项，请查看 review.md。")
+        raise SystemExit(f"代码审查发现阻塞项，请查看 {human_report_label(config, 'review')}。")
 
 
 if __name__ == "__main__":

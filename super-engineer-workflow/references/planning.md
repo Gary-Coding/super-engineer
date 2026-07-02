@@ -9,7 +9,8 @@
 必须产出：
 
 - `discovery.json`
-- `discovery.md`
+- `manual` 模式：`discovery.md`
+- `auto` 模式：`workflow-report.md`
 
 定位优先级：
 

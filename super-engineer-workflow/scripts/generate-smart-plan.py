@@ -19,7 +19,6 @@ from common import (
     parse_task_modules,
     phase_after,
     openspec_bridge_context_path,
-    report_artifact_path,
     read_json,
     read_text,
     resolve_target_codebases,
@@ -32,7 +31,7 @@ from common import (
     unique,
     workspace_root,
     write_managed_json,
-    write_managed_text,
+    write_human_report_section,
 )
 
 
@@ -438,7 +437,7 @@ def main() -> None:
 
     write_managed_json(config, data_artifact_path(config, "plan.json", session_meta), plan)
     write_managed_json(config, data_artifact_path(config, "plan-summary.json", session_meta), build_plan_summary(plan))
-    write_managed_text(config, report_artifact_path(config, "plan.md", session_meta), build_plan_markdown(plan) + "\n")
+    write_human_report_section(config, "plan", build_plan_markdown(plan), session_meta)
 
     status = ensure_status(config, session_meta, read_json(data_artifact_path(config, "status.json", session_meta), {}))
     phase, awaiting_confirmation, pending_for, next_action = phase_after("plan", config["mode"])
